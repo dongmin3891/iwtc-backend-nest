@@ -15,15 +15,15 @@
 
 ## 2. 저장소와 기준 브랜치
 
-| 용도 | 저장소 | 기준 브랜치 | 현재 기준 커밋 |
+| 용도 | 저장소 | 기준 브랜치 | 기능 기준 커밋 |
 | --- | --- | --- | --- |
-| 신규 백엔드 | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main` | `88a2ac0` + 미커밋 변경 |
-| 프론트엔드 | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project` | `c119ca2` + 미커밋 변경 |
+| 신규 백엔드 | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main` | `98406e8` |
+| 프론트엔드 | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project` | `35bb96d` |
 | 기존 Spring 참고용 | `https://github.com/dongmin3891/iwtc-backend-new.git` | `codex/nest-migration-plan` | `3703d2d` |
 
 신규 개발 코드는 `iwtc-backend-nest`에 작성한다. `iwtc-backend-new`를 신규 서버로 배포하지 않는다.
 
-현재 게임 결과·랭킹·미디어 구현은 신규 백엔드 작업 트리에, 새 게임 완료 요청 계약은 프론트엔드 작업 트리에 아직 커밋되지 않은 상태다. 다른 컴퓨터로 이동하기 전에 두 저장소의 변경을 각각 커밋하고 push해야 한다. `iwtc.code-workspace`는 로컬 편의 파일이므로 커밋 여부를 별도로 결정한다.
+게임 결과·랭킹·미디어 구현과 프론트엔드의 새 게임 완료 요청 계약은 각 원격 기준 브랜치에 push되어 있다. `iwtc.code-workspace`는 신규 백엔드 작업 트리에만 있는 로컬 편의 파일이며 커밋하지 않았다.
 
 ## 3. 새 환경에 내려받기
 
@@ -228,4 +228,4 @@ POST /api/world-cups/{worldCupId}/contents/{contentsId}/comments
 
 새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
 
-> `iwtc-backend-nest/HANDOFF.md`와 기존 참고 저장소의 `API_CONTRACT.md`를 먼저 읽어줘. 기존 DB와 비밀번호는 사용하지 않고 PostgreSQL 새 데이터 기준으로 진행한다. 신규 백엔드와 프론트엔드 작업 트리에 남은 미커밋 변경을 먼저 확인하고 보존해줘. 현재 완료된 API와 테스트를 확인한 뒤 댓글 조회·작성 계약부터 검토하고 구현해줘. 프론트엔드는 `iwtc-frontend-new`의 `refactor/full-project` 브랜치를 기준으로 실제 요청 형식을 확인해줘.
+> `iwtc-backend-nest/HANDOFF.md`와 기존 참고 저장소의 `API_CONTRACT.md`를 먼저 읽어줘. 기존 DB와 비밀번호는 사용하지 않고 PostgreSQL 새 데이터 기준으로 진행한다. 현재 완료된 API와 테스트를 확인한 뒤 댓글 조회·작성 계약부터 검토하고 구현해줘. 프론트엔드는 `iwtc-frontend-new`의 `refactor/full-project` 브랜치를 기준으로 실제 요청 형식을 확인해줘.
