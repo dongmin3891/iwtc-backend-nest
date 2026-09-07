@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum VisibilityType {
+  PUBLIC
+  PRIVATE
+}
+
+model WorldCup {
+  id          Int            @id @default(autoincrement())
+  ownerId     Int?           @map("owner_id")
+  title       String         @db.VarChar(100)
+  description String         @default("") @db.VarChar(500)
+  visibleType VisibilityType @default(PUBLIC) @map("visible_type")
+  views       Int            @default(0)
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  candidates  Candidate[]
+
+  @@index([visibleType, id])
+  @@index([visibleType, views])
+  @@map("world_cups")
+}
+
+model Candidate {
+  id          Int            @id @default(autoincrement())
+  worldCupId  Int            @map("world_cup_id")
+  name        String         @db.VarChar(100)
+  mediaFileId Int?           @map("media_file_id")
+  visibleType VisibilityType @default(PUBLIC) @map("visible_type")
+  sortOrder   Int            @default(0) @map("sort_order")
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  worldCup    WorldCup       @relation(fields: [worldCupId], references: [id], onDelete: Cascade)
+
+  @@unique([worldCupId, sortOrder])
+  @@index([worldCupId, visibleType])
+  @@map("candidates")
+}
