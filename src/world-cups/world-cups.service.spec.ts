@@ -28,4 +28,35 @@ describe('WorldCupsService', () => {
       }),
     );
   });
+
+  it('returns supported rounds that fit the public candidate count', async () => {
+    const findFirst = vi.fn().mockResolvedValue({
+      id: 1,
+      title: '첫 번째 월드컵',
+      description: '설명',
+      _count: { candidates: 4 },
+    });
+    const prisma = {
+      worldCup: { findFirst },
+    } as unknown as PrismaService;
+    const service = new WorldCupsService(prisma);
+
+    await expect(service.findAvailableRounds(1)).resolves.toEqual({
+      worldCupId: 1,
+      worldCupTitle: '첫 번째 월드컵',
+      worldCupDescription: '설명',
+      rounds: [2, 4],
+    });
+  });
+
+  it('rejects an unknown world cup', async () => {
+    const prisma = {
+      worldCup: { findFirst: vi.fn().mockResolvedValue(null) },
+    } as unknown as PrismaService;
+    const service = new WorldCupsService(prisma);
+
+    await expect(service.findAvailableRounds(999)).rejects.toMatchObject({
+      status: 404,
+    });
+  });
 });

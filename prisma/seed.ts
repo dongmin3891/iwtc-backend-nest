@@ -37,6 +37,18 @@ async function main(): Promise<void> {
         sortOrder: 2,
         visibleType: 'PUBLIC',
       },
+      {
+        worldCupId: worldCup.id,
+        name: '후보 C',
+        sortOrder: 3,
+        visibleType: 'PUBLIC',
+      },
+      {
+        worldCupId: worldCup.id,
+        name: '후보 D',
+        sortOrder: 4,
+        visibleType: 'PUBLIC',
+      },
     ],
     skipDuplicates: true,
   });

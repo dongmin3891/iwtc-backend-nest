@@ -17,3 +17,10 @@ export interface WorldCupPage {
   };
   totalPages: number;
 }
+
+export interface AvailableRounds {
+  worldCupId: number;
+  worldCupTitle: string;
+  worldCupDescription: string;
+  rounds: number[];
+}

@@ -16,12 +16,18 @@ describe('IWTC API (e2e)', () => {
 
     const count = vi.fn().mockResolvedValue(0);
     const findMany = vi.fn().mockResolvedValue([]);
+    const findFirst = vi.fn().mockResolvedValue({
+      id: 1,
+      title: '첫 번째 월드컵',
+      description: '설명',
+      _count: { candidates: 4 },
+    });
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
       .overrideProvider(PrismaService)
       .useValue({
-        worldCup: { count, findMany },
+        worldCup: { count, findMany, findFirst },
         $transaction: (queries: Promise<unknown>[]) => Promise.all(queries),
         $queryRaw: vi.fn().mockResolvedValue([{ '?column?': 1 }]),
       })
@@ -64,6 +70,22 @@ describe('IWTC API (e2e)', () => {
       .expect(400);
 
     expect(response.body).toMatchObject({ code: -1, data: null });
+  });
+
+  it('GET /api/world-cups/1/available-rounds returns 2 and 4', async () => {
+    await request(app.getHttpServer())
+      .get('/api/world-cups/1/available-rounds')
+      .expect(200)
+      .expect({
+        code: 1,
+        message: '플레이 가능한 라운드 조회 성공',
+        data: {
+          worldCupId: 1,
+          worldCupTitle: '첫 번째 월드컵',
+          worldCupDescription: '설명',
+          rounds: [2, 4],
+        },
+      });
   });
 
   afterAll(async () => {

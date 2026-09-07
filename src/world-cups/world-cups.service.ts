@@ -1,8 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { DateRange, ListWorldCupsQuery } from './dto/list-world-cups.query.js';
-import type { WorldCupPage } from './world-cups.types.js';
+import type { AvailableRounds, WorldCupPage } from './world-cups.types.js';
+
+const SUPPORTED_ROUNDS = [2, 4, 8, 16, 32, 64, 128, 256] as const;
 
 @Injectable()
 export class WorldCupsService {
@@ -53,6 +59,45 @@ export class WorldCupsService {
         pageSize: query.size,
       },
       totalPages: Math.ceil(totalElements / query.size),
+    };
+  }
+
+  async findAvailableRounds(worldCupId: number): Promise<AvailableRounds> {
+    const worldCup = await this.prisma.worldCup.findFirst({
+      where: {
+        id: worldCupId,
+        visibleType: 'PUBLIC',
+      },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        _count: {
+          select: {
+            candidates: {
+              where: { visibleType: 'PUBLIC' },
+            },
+          },
+        },
+      },
+    });
+
+    if (!worldCup) {
+      throw new NotFoundException('월드컵을 찾을 수 없습니다.');
+    }
+
+    const rounds = SUPPORTED_ROUNDS.filter(
+      (round) => round <= worldCup._count.candidates,
+    );
+    if (rounds.length === 0) {
+      throw new BadRequestException('플레이 가능한 콘텐츠가 부족합니다.');
+    }
+
+    return {
+      worldCupId: worldCup.id,
+      worldCupTitle: worldCup.title,
+      worldCupDescription: worldCup.description,
+      rounds,
     };
   }
 
