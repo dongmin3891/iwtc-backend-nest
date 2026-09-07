@@ -24,3 +24,19 @@ export interface AvailableRounds {
   worldCupDescription: string;
   rounds: number[];
 }
+
+export interface WorldCupGameContent {
+  fileType: 'STATIC_MEDIA_FILE';
+  contentsId: number;
+  name: string;
+  mediaFileId: number | null;
+  internetMovieStartPlayTime: null;
+  videoPlayDuration: null;
+}
+
+export interface WorldCupContents {
+  worldCupId: number;
+  title: string;
+  round: number;
+  contentsList: WorldCupGameContent[];
+}

@@ -5,8 +5,14 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { GetWorldCupContentsQuery } from './dto/get-world-cup-contents.query.js';
 import { DateRange, ListWorldCupsQuery } from './dto/list-world-cups.query.js';
-import type { AvailableRounds, WorldCupPage } from './world-cups.types.js';
+import type {
+  AvailableRounds,
+  WorldCupContents,
+  WorldCupGameContent,
+  WorldCupPage,
+} from './world-cups.types.js';
 
 const SUPPORTED_ROUNDS = [2, 4, 8, 16, 32, 64, 128, 256] as const;
 
@@ -101,6 +107,80 @@ export class WorldCupsService {
     };
   }
 
+  async findContents(
+    worldCupId: number,
+    query: GetWorldCupContentsQuery,
+  ): Promise<WorldCupContents> {
+    const worldCup = await this.prisma.worldCup.findFirst({
+      where: {
+        id: worldCupId,
+        visibleType: 'PUBLIC',
+      },
+      select: {
+        id: true,
+        title: true,
+        _count: {
+          select: {
+            candidates: {
+              where: { visibleType: 'PUBLIC' },
+            },
+          },
+        },
+      },
+    });
+
+    if (!worldCup) {
+      throw new NotFoundException('월드컵을 찾을 수 없습니다.');
+    }
+    if (worldCup._count.candidates < query.currentRound) {
+      throw new BadRequestException('요청한 라운드의 콘텐츠가 부족합니다.');
+    }
+
+    const contentsCount = query.currentRound / query.sliceContents;
+    if (!Number.isInteger(contentsCount)) {
+      throw new BadRequestException(
+        '현재 라운드는 요청 횟수로 나누어 떨어져야 합니다.',
+      );
+    }
+
+    const candidates = await this.prisma.candidate.findMany({
+      where: {
+        worldCupId,
+        visibleType: 'PUBLIC',
+        ...(query.excludeContentsIds.length > 0
+          ? { id: { notIn: query.excludeContentsIds } }
+          : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        mediaFileId: true,
+      },
+    });
+
+    if (candidates.length < contentsCount) {
+      throw new BadRequestException('조회할 수 있는 콘텐츠가 부족합니다.');
+    }
+
+    const contentsList: WorldCupGameContent[] = this.shuffle(candidates)
+      .slice(0, contentsCount)
+      .map((candidate) => ({
+        fileType: 'STATIC_MEDIA_FILE',
+        contentsId: candidate.id,
+        name: candidate.name,
+        mediaFileId: candidate.mediaFileId,
+        internetMovieStartPlayTime: null,
+        videoPlayDuration: null,
+      }));
+
+    return {
+      worldCupId: worldCup.id,
+      title: worldCup.title,
+      round: query.currentRound,
+      contentsList,
+    };
+  }
+
   private createdAtFilter(
     dateRange: DateRange,
   ): Pick<Prisma.WorldCupWhereInput, 'createdAt'> {
@@ -118,5 +198,17 @@ export class WorldCupsService {
     }
 
     return { createdAt: { gte: start } };
+  }
+
+  private shuffle<T>(items: T[]): T[] {
+    const shuffled = [...items];
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+      const randomIndex = Math.floor(Math.random() * (index + 1));
+      [shuffled[index], shuffled[randomIndex]] = [
+        shuffled[randomIndex],
+        shuffled[index],
+      ];
+    }
+    return shuffled;
   }
 }

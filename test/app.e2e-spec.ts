@@ -22,12 +22,19 @@ describe('IWTC API (e2e)', () => {
       description: '설명',
       _count: { candidates: 4 },
     });
+    const findCandidates = vi.fn().mockResolvedValue([
+      { id: 1, name: '후보 A', mediaFileId: null },
+      { id: 2, name: '후보 B', mediaFileId: null },
+      { id: 3, name: '후보 C', mediaFileId: null },
+      { id: 4, name: '후보 D', mediaFileId: null },
+    ]);
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
       .overrideProvider(PrismaService)
       .useValue({
         worldCup: { count, findMany, findFirst },
+        candidate: { findMany: findCandidates },
         $transaction: (queries: Promise<unknown>[]) => Promise.all(queries),
         $queryRaw: vi.fn().mockResolvedValue([{ '?column?': 1 }]),
       })
@@ -86,6 +93,36 @@ describe('IWTC API (e2e)', () => {
           rounds: [2, 4],
         },
       });
+  });
+
+  it('GET /api/world-cups/1/contents returns four game candidates', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/world-cups/1/contents?currentRound=4&sliceContents=1')
+      .expect(200);
+
+    expect(response.body).toMatchObject({
+      code: 1,
+      message: '컨텐츠 조회 성공',
+      data: {
+        worldCupId: 1,
+        title: '첫 번째 월드컵',
+        round: 4,
+      },
+    });
+    expect(response.body.data.contentsList).toHaveLength(4);
+    expect(
+      response.body.data.contentsList
+        .map(({ contentsId }: { contentsId: number }) => contentsId)
+        .sort(),
+    ).toEqual([1, 2, 3, 4]);
+  });
+
+  it('rejects an unsupported contents round', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/world-cups/1/contents?currentRound=3&sliceContents=1')
+      .expect(400);
+
+    expect(response.body).toMatchObject({ code: -1, data: null });
   });
 
   afterAll(async () => {
