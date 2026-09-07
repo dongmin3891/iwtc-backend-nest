@@ -1,0 +1,219 @@
+# IWTC 개발 인수인계
+
+마지막 확인일: 2026-09-07
+
+이 문서는 다른 컴퓨터나 새 Cursor 환경에서 IWTC 개발을 바로 이어가기 위한 현재 상태와 실행 절차를 정리한다.
+
+## 1. 프로젝트 원칙
+
+- 백엔드는 Spring Boot에서 NestJS로 새로 구현한다.
+- 데이터베이스는 PostgreSQL 18을 사용한다.
+- 기존 운영 DB, 기존 사용자 데이터, 기존 DB 계정과 비밀번호는 가져오지 않는다.
+- 새 Prisma migration과 새 데이터로 시작한다.
+- 기존 Spring 저장소는 API 동작과 비즈니스 규칙을 확인하는 참고 자료로만 사용한다.
+- 로컬 개발 비밀번호와 운영 비밀번호를 분리한다. 실제 운영 비밀번호는 Git에 올리지 않고 Kubernetes Secret으로 관리한다.
+
+## 2. 저장소와 기준 브랜치
+
+| 용도 | 저장소 | 기준 브랜치 | 현재 기준 커밋 |
+| --- | --- | --- | --- |
+| 신규 백엔드 | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main` | `ca22578` |
+| 프론트엔드 | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project` | `c119ca2` |
+| 기존 Spring 참고용 | `https://github.com/dongmin3891/iwtc-backend-new.git` | `codex/nest-migration-plan` | `3703d2d` |
+
+신규 개발 코드는 `iwtc-backend-nest`에 작성한다. `iwtc-backend-new`를 신규 서버로 배포하지 않는다.
+
+## 3. 새 환경에 내려받기
+
+세 저장소를 같은 상위 폴더에 두면 비교와 실행이 편하다.
+
+```bash
+mkdir iwtc
+cd iwtc
+
+git clone https://github.com/dongmin3891/iwtc-backend-nest.git
+
+git clone https://github.com/dongmin3891/iwtc-frontend-new.git
+cd iwtc-frontend-new
+git switch refactor/full-project
+cd ..
+
+git clone https://github.com/dongmin3891/iwtc-backend-new.git
+cd iwtc-backend-new
+git switch codex/nest-migration-plan
+cd ..
+```
+
+기존 Spring 코드가 당장 필요하지 않으면 세 번째 저장소는 나중에 받아도 된다.
+
+## 4. Cursor 워크스페이스 구성
+
+1. Cursor에서 `File > Add Folder to Workspace...`를 선택한다.
+2. `iwtc-frontend-new`와 `iwtc-backend-nest`를 추가한다.
+3. 기존 구현을 비교할 때만 `iwtc-backend-new`도 추가한다.
+4. `File > Save Workspace As...`로 `iwtc.code-workspace` 같은 이름으로 저장한다.
+
+워크스페이스 파일에는 컴퓨터별 절대 경로가 들어갈 수 있으므로 저장소에 반드시 커밋할 필요는 없다.
+
+## 5. 신규 백엔드 실행
+
+### 요구 사항
+
+- Node.js 24.19 이상
+- npm
+- Docker Desktop
+
+`.nvmrc`가 있으므로 nvm을 사용하면 프로젝트 버전을 바로 선택할 수 있다.
+
+```bash
+cd iwtc-backend-nest
+nvm install
+nvm use
+npm ci
+cp .env.example .env
+docker compose up -d postgres
+npm run db:migrate
+npm run db:seed
+npm run start:dev
+```
+
+백엔드 주소는 `http://localhost:3001`이다.
+
+- Swagger: `http://localhost:3001/docs`
+- 기본 상태 확인: `http://localhost:3001/health/live`
+- DB 연결 상태 확인: `http://localhost:3001/health/ready`
+
+`npm run db:migrate`와 `npm run db:seed`는 Prisma Client를 먼저 생성하도록 설정되어 있다. 따라서 별도로 `prisma generate`를 실행하지 않아도 된다.
+
+### 환경 변수 주의 사항
+
+- 현재 `.env.example`의 비밀번호는 로컬 개발 전용 예시값이며 운영 비밀번호가 아니다.
+- 다른 환경에서는 현재 컴퓨터의 `.env`를 복사하지 말고 `.env.example`로 새 `.env`를 만든다.
+- 운영 환경에서는 충분히 긴 새 비밀번호를 만들고 Kubernetes Secret으로 주입한다.
+- PostgreSQL 볼륨을 삭제하면 로컬 데이터가 사라지므로 의도적인 초기화가 아니면 볼륨 삭제 명령을 사용하지 않는다.
+
+## 6. 프론트엔드 실행
+
+```bash
+cd iwtc-frontend-new
+git switch refactor/full-project
+npm ci
+npm run dev
+```
+
+프론트엔드 주소는 `http://localhost:3000`이다. 현재 `.env.development`에는 두 API 주소가 모두 신규 NestJS 서버를 바라보도록 설정되어 있다.
+
+```env
+NEXT_PUBLIC_API_BASE_URL=http://localhost:3001/
+NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
+```
+
+백엔드를 먼저 실행한 뒤 프론트엔드를 실행한다.
+
+## 7. 현재 구현 상태
+
+신규 NestJS 백엔드에 다음 기능이 구현되어 있다.
+
+- NestJS 12, TypeScript 6, Node.js 24
+- Prisma 7.10과 PostgreSQL 18
+- 최초 Prisma schema와 migration
+- 재실행 가능한 개발용 seed
+- 공통 성공·오류 응답 형식
+- 환경 변수 검증과 CORS 설정
+- Swagger 문서
+- liveness/readiness 상태 확인
+- 공개 월드컵 목록 조회
+- 플레이 가능한 라운드 조회
+- 게임 대진 후보 조회와 탈락 후보 제외
+
+현재 API:
+
+| Method | 경로 | 상태 |
+| --- | --- | --- |
+| GET | `/health/live` | 완료 |
+| GET | `/health/ready` | 완료 |
+| GET | `/api/world-cups` | 완료 |
+| GET | `/api/world-cups/{worldCupId}/available-rounds` | 완료 |
+| GET | `/api/world-cups/{worldCupId}/contents` | 완료 |
+
+개발용 seed는 공개 월드컵 1개와 `후보 A`부터 `후보 D`까지 총 4개 후보를 만든다. 후보 ID는 실행 환경에 따라 달라질 수 있으므로 코드에서 특정 ID를 전제로 사용하지 않는다.
+
+## 8. 현재 확인된 사용자 흐름
+
+다음 흐름을 실제 브라우저에서 확인했다.
+
+1. 프론트 홈에서 `첫 번째 월드컵` 표시
+2. 월드컵 선택
+3. `4강` 선택
+4. 후보 4명으로 준결승 두 경기 진행
+5. 탈락 후보 ID를 제외해 결승 후보 2명 재조회
+6. 결승 대진 화면 표시
+
+후보에 연결된 실제 이미지가 아직 없으므로 현재는 프론트엔드 기본 이미지가 표시된다.
+
+## 9. 검증 명령
+
+백엔드:
+
+```bash
+npm run lint
+npm test
+npm run test:e2e
+npm run build
+```
+
+마지막 작업 기준으로 린트, Node.js 24.19 빌드, 단위 테스트 6개, API 통합 테스트 6개가 모두 통과했다.
+
+프론트엔드:
+
+```bash
+npm run typecheck
+npm run lint
+npm test
+```
+
+마지막 작업 기준으로 프론트 테스트 55개가 통과했다. 기존 `<img>` 사용과 관련된 Next.js 린트 경고가 있으나 실패는 아니다. `npm ci`에서 기존 의존성 취약점이 보고되었으며, 별도 검토 없이 강제 자동 수정하지 않는다.
+
+## 10. 참고 문서
+
+기존 Spring 참고 저장소의 다음 문서에 프론트엔드 API 계약과 전체 이전 계획이 정리되어 있다.
+
+- `iwtc-backend-new/API_CONTRACT.md`
+- `iwtc-backend-new/BACKEND_MIGRATION_PLAN.md`
+
+두 문서의 하단 진행 체크리스트 일부는 현재 구현보다 오래된 상태다. 실제 완료 여부는 이 문서와 신규 NestJS 저장소의 `main` 브랜치를 우선 기준으로 판단한다.
+
+## 11. 다음 작업
+
+가장 자연스러운 다음 작업은 결승 우승자를 선택했을 때 게임 결과를 저장하는 기능이다.
+
+```http
+POST /api/world-cups/{worldCupId}/clear
+```
+
+구현 전에 아래 계약을 먼저 확정해야 한다.
+
+- 2강 게임에서 존재하지 않는 3·4위를 어떻게 표현할지
+- 요청한 후보가 실제 해당 월드컵에 속하는지 검증하는 방법
+- 같은 결과가 여러 번 제출되는 것을 어떻게 방지할지
+- 점수를 후보 테이블에 바로 누적할지, 게임 결과 이력을 저장한 뒤 집계할지
+
+추천 방향은 게임 결과 이력을 별도 테이블에 저장하고 랭킹을 집계하는 방식이다. 중복 제출 방지를 위해 한 게임마다 식별자를 발급하는 설계도 함께 검토한다.
+
+그다음 우선순위는 다음과 같다.
+
+1. 게임 완료와 결과 저장 API
+2. 게임 결과·랭킹 조회 API
+3. 미디어 저장 방식 결정과 미디어 조회 API
+4. 댓글 API
+5. 회원가입·로그인과 refresh token rotation
+6. 월드컵·후보 관리 API
+7. GitHub Actions, GHCR, Kubernetes, Argo CD 배포
+8. PostgreSQL 백업과 복구 테스트
+
+## 12. 새 작업을 시작할 때 전달할 내용
+
+새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
+
+> `iwtc-backend-nest/HANDOFF.md`와 기존 참고 저장소의 `API_CONTRACT.md`를 먼저 읽어줘. 기존 DB와 비밀번호는 사용하지 않고 PostgreSQL 새 데이터 기준으로 진행한다. 현재 완료된 API와 테스트를 확인한 뒤 `POST /api/world-cups/{worldCupId}/clear` 계약부터 검토하고 구현해줘. 프론트엔드는 `iwtc-frontend-new`의 `refactor/full-project` 브랜치를 기준으로 실제 요청 형식을 확인해줘.
+
