@@ -1,6 +1,6 @@
 # IWTC 개발 인수인계
 
-마지막 확인일: 2026-09-07
+마지막 확인일: 2026-09-08
 
 이 문서는 다른 컴퓨터나 새 Cursor 환경에서 IWTC 개발을 바로 이어가기 위한 현재 상태와 실행 절차를 정리한다.
 
@@ -17,11 +17,13 @@
 
 | 용도 | 저장소 | 기준 브랜치 | 현재 기준 커밋 |
 | --- | --- | --- | --- |
-| 신규 백엔드 | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main` | `ca22578` |
-| 프론트엔드 | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project` | `c119ca2` |
+| 신규 백엔드 | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main` | `88a2ac0` + 미커밋 변경 |
+| 프론트엔드 | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project` | `c119ca2` + 미커밋 변경 |
 | 기존 Spring 참고용 | `https://github.com/dongmin3891/iwtc-backend-new.git` | `codex/nest-migration-plan` | `3703d2d` |
 
 신규 개발 코드는 `iwtc-backend-nest`에 작성한다. `iwtc-backend-new`를 신규 서버로 배포하지 않는다.
+
+현재 게임 결과·랭킹·미디어 구현은 신규 백엔드 작업 트리에, 새 게임 완료 요청 계약은 프론트엔드 작업 트리에 아직 커밋되지 않은 상태다. 다른 컴퓨터로 이동하기 전에 두 저장소의 변경을 각각 커밋하고 push해야 한다. `iwtc.code-workspace`는 로컬 편의 파일이므로 커밋 여부를 별도로 결정한다.
 
 ## 3. 새 환경에 내려받기
 
@@ -89,6 +91,7 @@ npm run start:dev
 
 - 현재 `.env.example`의 비밀번호는 로컬 개발 전용 예시값이며 운영 비밀번호가 아니다.
 - 다른 환경에서는 현재 컴퓨터의 `.env`를 복사하지 말고 `.env.example`로 새 `.env`를 만든다.
+- 정적 미디어 공개 주소는 `MEDIA_PUBLIC_BASE_URL`로 설정한다. 운영 환경에서는 HTTPS URL만 허용한다.
 - 운영 환경에서는 충분히 긴 새 비밀번호를 만들고 Kubernetes Secret으로 주입한다.
 - PostgreSQL 볼륨을 삭제하면 로컬 데이터가 사라지므로 의도적인 초기화가 아니면 볼륨 삭제 명령을 사용하지 않는다.
 
@@ -125,6 +128,10 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 - 공개 월드컵 목록 조회
 - 플레이 가능한 라운드 조회
 - 게임 대진 후보 조회와 탈락 후보 제외
+- 게임 결과 이력과 1~4위 저장
+- `playId` 기반 중복 제출 방지
+- 누적 점수 기반 게임 결과 랭킹 조회
+- 미디어 메타데이터 저장 모델과 공개 URL 조회
 
 현재 API:
 
@@ -135,8 +142,15 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 | GET | `/api/world-cups` | 완료 |
 | GET | `/api/world-cups/{worldCupId}/available-rounds` | 완료 |
 | GET | `/api/world-cups/{worldCupId}/contents` | 완료 |
+| POST | `/api/world-cups/{worldCupId}/clear` | 완료 |
+| GET | `/api/world-cups/{worldCupId}/game-result-contents` | 완료 |
+| GET | `/api/media-files/{mediaFileId}` | 완료 |
 
 개발용 seed는 공개 월드컵 1개와 `후보 A`부터 `후보 D`까지 총 4개 후보를 만든다. 후보 ID는 실행 환경에 따라 달라질 수 있으므로 코드에서 특정 ID를 전제로 사용하지 않는다.
+
+게임 결과는 `GamePlay`와 `GamePlacement`에 저장한다. `playId`는 UUID v4이며 같은 결과의 재요청은 기존 결과를 반환하고, 같은 `playId`를 다른 결과에 사용하면 HTTP 409를 반환한다. 랭킹은 후보별 누적 점수로 계산하고 동점 후보에게 같은 순위를 부여한다.
+
+미디어는 PostgreSQL에 메타데이터와 object key만 저장한다. 정적 파일 응답은 `MEDIA_PUBLIC_BASE_URL` 기반의 공개 URL이며 `size=divide2`에 썸네일 key가 없으면 원본 URL로 대체한다. 현재 Compose에는 실제 S3 호환 오브젝트 스토리지가 포함되어 있지 않으므로 운영·로컬 저장소 공급자는 별도로 구성해야 한다.
 
 ## 8. 현재 확인된 사용자 흐름
 
@@ -151,6 +165,8 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 
 후보에 연결된 실제 이미지가 아직 없으므로 현재는 프론트엔드 기본 이미지가 표시된다.
 
+게임 완료 저장, 누적 랭킹, 미디어 조회는 자동화 테스트로 검증했다. 새 migration을 실제 로컬 PostgreSQL에 적용한 뒤 게임 완료 화면과 랭킹 갱신까지 이어지는 브라우저 흐름은 아직 다시 확인하지 않았다.
+
 ## 9. 검증 명령
 
 백엔드:
@@ -162,7 +178,7 @@ npm run test:e2e
 npm run build
 ```
 
-마지막 작업 기준으로 린트, Node.js 24.19 빌드, 단위 테스트 6개, API 통합 테스트 6개가 모두 통과했다.
+마지막 작업 기준으로 린트, 빌드, 단위 테스트 27개, API 통합 테스트 14개가 모두 통과했다.
 
 프론트엔드:
 
@@ -185,35 +201,31 @@ npm test
 
 ## 11. 다음 작업
 
-가장 자연스러운 다음 작업은 결승 우승자를 선택했을 때 게임 결과를 저장하는 기능이다.
+가장 자연스러운 다음 작업은 월드컵과 후보별 댓글 조회·작성 API를 구현하는 것이다.
 
 ```http
-POST /api/world-cups/{worldCupId}/clear
+GET /api/world-cups/{worldCupId}/comments?offset=0
+POST /api/world-cups/{worldCupId}/contents/{contentsId}/comments
 ```
 
-구현 전에 아래 계약을 먼저 확정해야 한다.
+현재 프론트엔드는 댓글 목록에 `commentId`, `commentWriterId`, `writerNickname`, `body`, `createdAt`을 기대한다. 작성 요청은 `body`와 `nickname`을 보내며 `body`는 기존 계약상 1~30자다. 회원·인증 기능이 아직 없으므로 구현 전에 아래 정책을 확정해야 한다.
 
-- 2강 게임에서 존재하지 않는 3·4위를 어떻게 표현할지
-- 요청한 후보가 실제 해당 월드컵에 속하는지 검증하는 방법
-- 같은 결과가 여러 번 제출되는 것을 어떻게 방지할지
-- 점수를 후보 테이블에 바로 누적할지, 게임 결과 이력을 저장한 뒤 집계할지
-
-추천 방향은 게임 결과 이력을 별도 테이블에 저장하고 랭킹을 집계하는 방식이다. 중복 제출 방지를 위해 한 게임마다 식별자를 발급하는 설계도 함께 검토한다.
+- 첫 댓글 버전에서 비회원 작성을 허용할지
+- 비회원 nickname을 클라이언트 값 그대로 신뢰할지 서버에서 발급할지
+- `offset`만 유지할지 `limit`과 안정적인 정렬 기준을 함께 도입할지
+- 후보가 해당 월드컵에 속하는지와 공개 상태를 어떻게 검증할지
+- 댓글 수정·삭제와 신고 기능을 어느 단계에서 추가할지
 
 그다음 우선순위는 다음과 같다.
 
-1. 게임 완료와 결과 저장 API
-2. 게임 결과·랭킹 조회 API
-3. 미디어 저장 방식 결정과 미디어 조회 API
-4. 댓글 API
-5. 회원가입·로그인과 refresh token rotation
-6. 월드컵·후보 관리 API
-7. GitHub Actions, GHCR, Kubernetes, Argo CD 배포
-8. PostgreSQL 백업과 복구 테스트
+1. 댓글 API
+2. 회원가입·로그인과 refresh token rotation
+3. 월드컵·후보 관리 API
+4. GitHub Actions, GHCR, Kubernetes, Argo CD 배포
+5. PostgreSQL 백업과 복구 테스트
 
 ## 12. 새 작업을 시작할 때 전달할 내용
 
 새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
 
-> `iwtc-backend-nest/HANDOFF.md`와 기존 참고 저장소의 `API_CONTRACT.md`를 먼저 읽어줘. 기존 DB와 비밀번호는 사용하지 않고 PostgreSQL 새 데이터 기준으로 진행한다. 현재 완료된 API와 테스트를 확인한 뒤 `POST /api/world-cups/{worldCupId}/clear` 계약부터 검토하고 구현해줘. 프론트엔드는 `iwtc-frontend-new`의 `refactor/full-project` 브랜치를 기준으로 실제 요청 형식을 확인해줘.
-
+> `iwtc-backend-nest/HANDOFF.md`와 기존 참고 저장소의 `API_CONTRACT.md`를 먼저 읽어줘. 기존 DB와 비밀번호는 사용하지 않고 PostgreSQL 새 데이터 기준으로 진행한다. 신규 백엔드와 프론트엔드 작업 트리에 남은 미커밋 변경을 먼저 확인하고 보존해줘. 현재 완료된 API와 테스트를 확인한 뒤 댓글 조회·작성 계약부터 검토하고 구현해줘. 프론트엔드는 `iwtc-frontend-new`의 `refactor/full-project` 브랜치를 기준으로 실제 요청 형식을 확인해줘.

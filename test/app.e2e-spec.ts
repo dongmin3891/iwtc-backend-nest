@@ -10,6 +10,7 @@ describe('IWTC API (e2e)', () => {
   beforeAll(async () => {
     process.env.NODE_ENV = 'test';
     process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test';
+    process.env.MEDIA_PUBLIC_BASE_URL = 'https://media.example.com/iwtc';
 
     const { AppModule } = await import('../src/app.module.js');
     const { PrismaService } = await import('../src/prisma/prisma.service.js');
@@ -22,12 +23,129 @@ describe('IWTC API (e2e)', () => {
       description: '설명',
       _count: { candidates: 4 },
     });
-    const findCandidates = vi.fn().mockResolvedValue([
+    const candidates = [
       { id: 1, name: '후보 A', mediaFileId: null },
       { id: 2, name: '후보 B', mediaFileId: null },
       { id: 3, name: '후보 C', mediaFileId: null },
       { id: 4, name: '후보 D', mediaFileId: null },
-    ]);
+    ];
+    const findCandidates = vi
+      .fn()
+      .mockImplementation(
+        (arguments_: { where?: { id?: { in?: number[] } } }) => {
+          const requestedIds = arguments_.where?.id?.in;
+          return Promise.resolve(
+            requestedIds
+              ? candidates.filter((candidate) =>
+                  requestedIds.includes(candidate.id),
+                )
+              : candidates,
+          );
+        },
+      );
+    type StoredPlay = {
+      id: string;
+      worldCupId: number;
+      initialRound: number;
+      placements: Array<{
+        rank: number;
+        score: number;
+        candidate: (typeof candidates)[number];
+      }>;
+    };
+    const storedPlays = new Map<string, StoredPlay>();
+    const gamePlay = {
+      findUnique: vi
+        .fn()
+        .mockImplementation(({ where }: { where: { id: string } }) =>
+          Promise.resolve(storedPlays.get(where.id) ?? null),
+        ),
+      create: vi.fn().mockImplementation(
+        ({
+          data,
+        }: {
+          data: {
+            id: string;
+            worldCupId: number;
+            initialRound: number;
+            placements: {
+              create: Array<{
+                candidateId: number;
+                rank: number;
+                score: number;
+              }>;
+            };
+          };
+        }) => {
+          if (storedPlays.has(data.id)) {
+            return Promise.reject({ code: 'P2002' });
+          }
+
+          const play: StoredPlay = {
+            id: data.id,
+            worldCupId: data.worldCupId,
+            initialRound: data.initialRound,
+            placements: data.placements.create.map((placement) => ({
+              rank: placement.rank,
+              score: placement.score,
+              candidate: candidates.find(
+                (candidate) => candidate.id === placement.candidateId,
+              )!,
+            })),
+          };
+          storedPlays.set(play.id, play);
+          return Promise.resolve(play);
+        },
+      ),
+    };
+    const gamePlacement = {
+      groupBy: vi.fn().mockImplementation(() => {
+        const scores = new Map<number, number>();
+        for (const play of storedPlays.values()) {
+          for (const placement of play.placements) {
+            scores.set(
+              placement.candidate.id,
+              (scores.get(placement.candidate.id) ?? 0) + placement.score,
+            );
+          }
+        }
+        return Promise.resolve(
+          [...scores].map(([candidateId, score]) => ({
+            candidateId,
+            _sum: { score },
+          })),
+        );
+      }),
+    };
+    const transactionClient = {
+      worldCup: { findFirst },
+      candidate: { findMany: findCandidates },
+      gamePlay,
+    };
+    const mediaFiles = [
+      {
+        id: 10,
+        fileType: 'STATIC_MEDIA_FILE',
+        detailType: 'PNG',
+        objectKey: 'original/candidate A.png',
+        thumbnailObjectKey: 'divide2/candidate A.png',
+        externalUrl: null,
+        originalName: 'candidate A.png',
+        videoStartTime: null,
+        videoPlayDuration: null,
+        createdAt: new Date('2026-09-07T00:00:00.000Z'),
+        updatedAt: new Date('2026-09-07T01:00:00.000Z'),
+      },
+    ];
+    const mediaFile = {
+      findUnique: vi
+        .fn()
+        .mockImplementation(({ where }: { where: { id: number } }) =>
+          Promise.resolve(
+            mediaFiles.find((item) => item.id === where.id) ?? null,
+          ),
+        ),
+    };
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
@@ -35,7 +153,17 @@ describe('IWTC API (e2e)', () => {
       .useValue({
         worldCup: { count, findMany, findFirst },
         candidate: { findMany: findCandidates },
-        $transaction: (queries: Promise<unknown>[]) => Promise.all(queries),
+        gamePlay,
+        gamePlacement,
+        mediaFile,
+        $transaction: (
+          operation:
+            | Promise<unknown>[]
+            | ((client: typeof transactionClient) => Promise<unknown>),
+        ) =>
+          Array.isArray(operation)
+            ? Promise.all(operation)
+            : operation(transactionClient),
         $queryRaw: vi.fn().mockResolvedValue([{ '?column?': 1 }]),
       })
       .compile();
@@ -123,6 +251,175 @@ describe('IWTC API (e2e)', () => {
       .expect(400);
 
     expect(response.body).toMatchObject({ code: -1, data: null });
+  });
+
+  it('POST /api/world-cups/1/clear saves a game result', async () => {
+    await request(app.getHttpServer())
+      .post('/api/world-cups/1/clear')
+      .send({
+        playId: '550e8400-e29b-41d4-a716-446655440000',
+        round: 4,
+        placements: [
+          { contentsId: 1, rank: 1 },
+          { contentsId: 2, rank: 2 },
+          { contentsId: 3, rank: 3 },
+          { contentsId: 4, rank: 4 },
+        ],
+      })
+      .expect(201)
+      .expect({
+        code: 1,
+        message: '게임 결과 생성',
+        data: [
+          { contentsName: '후보 A', contentsId: 1, mediaFileId: null, rank: 1 },
+          { contentsName: '후보 B', contentsId: 2, mediaFileId: null, rank: 2 },
+          { contentsName: '후보 C', contentsId: 3, mediaFileId: null, rank: 3 },
+          { contentsName: '후보 D', contentsId: 4, mediaFileId: null, rank: 4 },
+        ],
+      });
+  });
+
+  it('returns the original result for an identical retry', async () => {
+    await request(app.getHttpServer())
+      .post('/api/world-cups/1/clear')
+      .send({
+        playId: '550e8400-e29b-41d4-a716-446655440000',
+        round: 4,
+        placements: [
+          { contentsId: 1, rank: 1 },
+          { contentsId: 2, rank: 2 },
+          { contentsId: 3, rank: 3 },
+          { contentsId: 4, rank: 4 },
+        ],
+      })
+      .expect(201)
+      .expect((response) => {
+        expect(response.body.data).toHaveLength(4);
+        expect(response.body.data[0]).toMatchObject({
+          contentsId: 1,
+          rank: 1,
+        });
+      });
+  });
+
+  it('rejects reuse of a play id with a different result', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/world-cups/1/clear')
+      .send({
+        playId: '550e8400-e29b-41d4-a716-446655440000',
+        round: 4,
+        placements: [
+          { contentsId: 2, rank: 1 },
+          { contentsId: 1, rank: 2 },
+          { contentsId: 3, rank: 3 },
+          { contentsId: 4, rank: 4 },
+        ],
+      })
+      .expect(409);
+
+    expect(response.body).toMatchObject({
+      code: -1,
+      message: '이미 다른 결과에 사용된 playId입니다.',
+      data: null,
+    });
+  });
+
+  it('rejects an invalid clear request', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/world-cups/1/clear')
+      .send({
+        playId: 'not-a-uuid',
+        round: 2,
+        placements: [
+          { contentsId: 1, rank: 1 },
+          { contentsId: 1, rank: 2 },
+        ],
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({ code: -1, data: null });
+  });
+
+  it('GET /api/world-cups/1/game-result-contents returns accumulated rankings', async () => {
+    await request(app.getHttpServer())
+      .get('/api/world-cups/1/game-result-contents')
+      .expect(200)
+      .expect({
+        code: 1,
+        message: '게임 결과 컨텐츠 리스트 조회 성공',
+        data: [
+          {
+            contentsId: 1,
+            contentsName: '후보 A',
+            mediaFileId: null,
+            gameRank: 1,
+            gameScore: 10,
+          },
+          {
+            contentsId: 2,
+            contentsName: '후보 B',
+            mediaFileId: null,
+            gameRank: 2,
+            gameScore: 7,
+          },
+          {
+            contentsId: 3,
+            contentsName: '후보 C',
+            mediaFileId: null,
+            gameRank: 3,
+            gameScore: 4,
+          },
+          {
+            contentsId: 4,
+            contentsName: '후보 D',
+            mediaFileId: null,
+            gameRank: 3,
+            gameScore: 4,
+          },
+        ],
+      });
+  });
+
+  it('GET /api/media-files/10 returns the requested thumbnail URL', async () => {
+    await request(app.getHttpServer())
+      .get('/api/media-files/10?size=divide2')
+      .expect('Cache-Control', 'public, max-age=600')
+      .expect(200)
+      .expect({
+        code: 1,
+        message: '미디어 파일 조회',
+        data: {
+          mediaFileId: 10,
+          fileType: 'STATIC_MEDIA_FILE',
+          mediaData: 'https://media.example.com/iwtc/divide2/candidate%20A.png',
+          originalName: 'candidate A.png',
+          videoStartTime: null,
+          videoPlayDuration: null,
+          detailType: 'PNG',
+          createdAt: '2026-09-07T00:00:00.000Z',
+          updatedAt: '2026-09-07T01:00:00.000Z',
+        },
+      });
+  });
+
+  it('rejects an unsupported media size', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/media-files/10?size=small')
+      .expect(400);
+
+    expect(response.body).toMatchObject({ code: -1, data: null });
+  });
+
+  it('returns 404 for an unknown media file', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/media-files/999')
+      .expect(404);
+
+    expect(response.body).toMatchObject({
+      code: -1,
+      message: '미디어 파일을 찾을 수 없습니다.',
+      data: null,
+    });
   });
 
   afterAll(async () => {

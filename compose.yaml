@@ -22,6 +22,7 @@ services:
       PORT: 3001
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       CORS_ORIGINS: ${CORS_ORIGINS}
+      MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:9000/iwtc}
     ports:
       - "3001:3001"
     depends_on:

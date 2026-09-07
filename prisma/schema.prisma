@@ -12,6 +12,20 @@ enum VisibilityType {
   PRIVATE
 }
 
+enum MediaFileType {
+  STATIC_MEDIA_FILE
+  INTERNET_VIDEO_URL
+}
+
+enum MediaDetailType {
+  JPEG
+  JPG
+  PNG
+  GIF
+  MP4
+  YOU_TUBE_URL
+}
+
 model WorldCup {
   id          Int            @id @default(autoincrement())
   ownerId     Int?           @map("owner_id")
@@ -22,6 +36,7 @@ model WorldCup {
   createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
   candidates  Candidate[]
+  gamePlays   GamePlay[]
 
   @@index([visibleType, id])
   @@index([visibleType, views])
@@ -29,17 +44,64 @@ model WorldCup {
 }
 
 model Candidate {
-  id          Int            @id @default(autoincrement())
-  worldCupId  Int            @map("world_cup_id")
-  name        String         @db.VarChar(100)
-  mediaFileId Int?           @map("media_file_id")
-  visibleType VisibilityType @default(PUBLIC) @map("visible_type")
-  sortOrder   Int            @default(0) @map("sort_order")
-  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
-  worldCup    WorldCup       @relation(fields: [worldCupId], references: [id], onDelete: Cascade)
+  id          Int             @id @default(autoincrement())
+  worldCupId  Int             @map("world_cup_id")
+  name        String          @db.VarChar(100)
+  mediaFileId Int?            @map("media_file_id")
+  visibleType VisibilityType  @default(PUBLIC) @map("visible_type")
+  sortOrder   Int             @default(0) @map("sort_order")
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  worldCup    WorldCup        @relation(fields: [worldCupId], references: [id], onDelete: Cascade)
+  mediaFile   MediaFile?      @relation(fields: [mediaFileId], references: [id], onDelete: SetNull)
+  placements  GamePlacement[]
 
   @@unique([worldCupId, sortOrder])
   @@index([worldCupId, visibleType])
   @@map("candidates")
+}
+
+model MediaFile {
+  id                 Int             @id @default(autoincrement())
+  fileType           MediaFileType   @map("file_type")
+  detailType         MediaDetailType @map("detail_type")
+  objectKey          String?         @map("object_key") @db.VarChar(1024)
+  thumbnailObjectKey String?         @map("thumbnail_object_key") @db.VarChar(1024)
+  externalUrl        String?         @map("external_url") @db.VarChar(2048)
+  originalName       String?         @map("original_name") @db.VarChar(255)
+  videoStartTime     String?         @map("video_start_time") @db.VarChar(5)
+  videoPlayDuration  Int?            @map("video_play_duration")
+  createdAt          DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  candidates         Candidate[]
+
+  @@map("media_files")
+}
+
+model GamePlay {
+  id           String          @id @default(uuid()) @db.Uuid
+  worldCupId   Int             @map("world_cup_id")
+  initialRound Int             @map("initial_round")
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt  DateTime?       @map("completed_at") @db.Timestamptz(3)
+  worldCup     WorldCup        @relation(fields: [worldCupId], references: [id], onDelete: Cascade)
+  placements   GamePlacement[]
+
+  @@index([worldCupId, completedAt])
+  @@map("game_plays")
+}
+
+model GamePlacement {
+  gamePlayId  String    @map("game_play_id") @db.Uuid
+  candidateId Int       @map("candidate_id")
+  rank        Int
+  score       Int
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  gamePlay    GamePlay  @relation(fields: [gamePlayId], references: [id], onDelete: Cascade)
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: NoAction)
+
+  @@id([gamePlayId, rank])
+  @@unique([gamePlayId, candidateId])
+  @@index([candidateId])
+  @@map("game_placements")
 }

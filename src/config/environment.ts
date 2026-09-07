@@ -5,6 +5,7 @@ export interface Environment {
   PORT: number;
   DATABASE_URL: string;
   CORS_ORIGINS: string[];
+  MEDIA_PUBLIC_BASE_URL: string;
 }
 
 export function validateEnvironment(
@@ -31,6 +32,16 @@ export function validateEnvironment(
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
+  const mediaPublicBaseUrl = String(
+    raw.MEDIA_PUBLIC_BASE_URL ??
+      (nodeEnv === 'production' ? '' : 'http://localhost:9000/iwtc'),
+  ).replace(/\/+$/, '');
+  if (!/^https?:\/\//.test(mediaPublicBaseUrl)) {
+    throw new Error('MEDIA_PUBLIC_BASE_URL은 유효한 HTTP(S) URL이어야 합니다.');
+  }
+  if (nodeEnv === 'production' && !mediaPublicBaseUrl.startsWith('https://')) {
+    throw new Error('운영 MEDIA_PUBLIC_BASE_URL은 HTTPS URL이어야 합니다.');
+  }
 
   return {
     ...raw,
@@ -38,5 +49,6 @@ export function validateEnvironment(
     PORT: port,
     DATABASE_URL: databaseUrl,
     CORS_ORIGINS: corsOrigins,
+    MEDIA_PUBLIC_BASE_URL: mediaPublicBaseUrl,
   };
 }

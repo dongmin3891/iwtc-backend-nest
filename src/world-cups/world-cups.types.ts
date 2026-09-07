@@ -40,3 +40,18 @@ export interface WorldCupContents {
   round: number;
   contentsList: WorldCupGameContent[];
 }
+
+export interface ClearWorldCupResultContent {
+  contentsName: string;
+  contentsId: number;
+  mediaFileId: number | null;
+  rank: number;
+}
+
+export interface WorldCupRankingContent {
+  contentsId: number;
+  contentsName: string;
+  mediaFileId: number | null;
+  gameRank: number;
+  gameScore: number;
+}

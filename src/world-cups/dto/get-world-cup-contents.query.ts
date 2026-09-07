@@ -1,8 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import { ArrayUnique, IsArray, IsIn, IsInt, Max, Min } from 'class-validator';
-
-const SUPPORTED_ROUNDS = [2, 4, 8, 16, 32, 64, 128, 256] as const;
+import { SUPPORTED_ROUNDS } from '../world-cups.constants.js';
 
 export class GetWorldCupContentsQuery {
   @ApiProperty({ enum: SUPPORTED_ROUNDS, example: 4 })

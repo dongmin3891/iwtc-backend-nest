@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { validateEnvironment } from './config/environment.js';
 import { HealthModule } from './health/health.module.js';
+import { MediaFilesModule } from './media-files/media-files.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { WorldCupsModule } from './world-cups/world-cups.module.js';
 
@@ -13,6 +14,7 @@ import { WorldCupsModule } from './world-cups/world-cups.module.js';
     }),
     PrismaModule,
     HealthModule,
+    MediaFilesModule,
     WorldCupsModule,
   ],
 })

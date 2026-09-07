@@ -1,20 +1,46 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { ClearWorldCupDto } from './dto/clear-world-cup.dto.js';
 import { GetWorldCupContentsQuery } from './dto/get-world-cup-contents.query.js';
 import { DateRange, ListWorldCupsQuery } from './dto/list-world-cups.query.js';
+import { SUPPORTED_ROUNDS } from './world-cups.constants.js';
 import type {
   AvailableRounds,
+  ClearWorldCupResultContent,
   WorldCupContents,
   WorldCupGameContent,
   WorldCupPage,
+  WorldCupRankingContent,
 } from './world-cups.types.js';
 
-const SUPPORTED_ROUNDS = [2, 4, 8, 16, 32, 64, 128, 256] as const;
+const GAME_RESULT_SELECT = {
+  id: true,
+  worldCupId: true,
+  initialRound: true,
+  placements: {
+    orderBy: { rank: 'asc' },
+    select: {
+      rank: true,
+      candidate: {
+        select: {
+          id: true,
+          name: true,
+          mediaFileId: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.GamePlaySelect;
+
+type SavedGameResult = Prisma.GamePlayGetPayload<{
+  select: typeof GAME_RESULT_SELECT;
+}>;
 
 @Injectable()
 export class WorldCupsService {
@@ -181,6 +207,187 @@ export class WorldCupsService {
     };
   }
 
+  async saveGameResult(
+    worldCupId: number,
+    request: ClearWorldCupDto,
+  ): Promise<ClearWorldCupResultContent[]> {
+    let savedPlay: SavedGameResult;
+    try {
+      savedPlay = await this.prisma.$transaction(async (transaction) => {
+        const existingPlay = await transaction.gamePlay.findUnique({
+          where: { id: request.playId },
+          select: GAME_RESULT_SELECT,
+        });
+        if (existingPlay) {
+          this.assertSameGameResult(existingPlay, worldCupId, request);
+          return existingPlay;
+        }
+
+        const worldCup = await transaction.worldCup.findFirst({
+          where: {
+            id: worldCupId,
+            visibleType: 'PUBLIC',
+          },
+          select: { id: true },
+        });
+        if (!worldCup) {
+          throw new NotFoundException('월드컵을 찾을 수 없습니다.');
+        }
+
+        const candidateIds = request.placements.map(
+          (placement) => placement.contentsId,
+        );
+        const candidates = await transaction.candidate.findMany({
+          where: {
+            id: { in: candidateIds },
+            worldCupId,
+            visibleType: 'PUBLIC',
+          },
+          select: { id: true },
+        });
+        if (candidates.length !== candidateIds.length) {
+          throw new BadRequestException(
+            '결과 후보는 모두 해당 월드컵의 공개 후보여야 합니다.',
+          );
+        }
+
+        return transaction.gamePlay.create({
+          data: {
+            id: request.playId,
+            worldCupId,
+            initialRound: request.round,
+            completedAt: new Date(),
+            placements: {
+              create: request.placements.map((placement) => ({
+                candidateId: placement.contentsId,
+                rank: placement.rank,
+                score: this.scoreForRank(placement.rank),
+              })),
+            },
+          },
+          select: GAME_RESULT_SELECT,
+        });
+      });
+    } catch (error) {
+      if (!this.isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      const existingPlay = await this.prisma.gamePlay.findUnique({
+        where: { id: request.playId },
+        select: GAME_RESULT_SELECT,
+      });
+      if (!existingPlay) {
+        throw error;
+      }
+      this.assertSameGameResult(existingPlay, worldCupId, request);
+      savedPlay = existingPlay;
+    }
+
+    return this.toClearWorldCupResult(savedPlay);
+  }
+
+  async findGameResultContents(
+    worldCupId: number,
+  ): Promise<WorldCupRankingContent[]> {
+    const worldCup = await this.prisma.worldCup.findFirst({
+      where: {
+        id: worldCupId,
+        visibleType: 'PUBLIC',
+      },
+      select: { id: true },
+    });
+    if (!worldCup) {
+      throw new NotFoundException('월드컵을 찾을 수 없습니다.');
+    }
+
+    const candidates = await this.prisma.candidate.findMany({
+      where: {
+        worldCupId,
+        visibleType: 'PUBLIC',
+      },
+      select: {
+        id: true,
+        name: true,
+        mediaFileId: true,
+      },
+    });
+    const scoreGroups = await this.prisma.gamePlacement.groupBy({
+      by: ['candidateId'],
+      where: { candidateId: { in: candidates.map(({ id }) => id) } },
+      _sum: { score: true },
+    });
+    const scores = new Map(
+      scoreGroups.map((group) => [group.candidateId, group._sum.score ?? 0]),
+    );
+    const sortedCandidates = candidates
+      .map((candidate) => ({
+        ...candidate,
+        gameScore: scores.get(candidate.id) ?? 0,
+      }))
+      .sort(
+        (left, right) => right.gameScore - left.gameScore || left.id - right.id,
+      );
+
+    let previousScore: number | undefined;
+    let previousRank = 0;
+    return sortedCandidates.map((candidate, index) => {
+      const gameRank =
+        candidate.gameScore === previousScore ? previousRank : index + 1;
+      previousScore = candidate.gameScore;
+      previousRank = gameRank;
+      return {
+        contentsId: candidate.id,
+        contentsName: candidate.name,
+        mediaFileId: candidate.mediaFileId,
+        gameRank,
+        gameScore: candidate.gameScore,
+      };
+    });
+  }
+
+  private toClearWorldCupResult(
+    savedPlay: SavedGameResult,
+  ): ClearWorldCupResultContent[] {
+    return savedPlay.placements.map((placement) => ({
+      contentsName: placement.candidate.name,
+      contentsId: placement.candidate.id,
+      mediaFileId: placement.candidate.mediaFileId,
+      rank: placement.rank,
+    }));
+  }
+
+  private assertSameGameResult(
+    savedPlay: SavedGameResult,
+    worldCupId: number,
+    request: ClearWorldCupDto,
+  ): void {
+    const isSameResult =
+      savedPlay.worldCupId === worldCupId &&
+      savedPlay.initialRound === request.round &&
+      savedPlay.placements.length === request.placements.length &&
+      request.placements.every((requestedPlacement) =>
+        savedPlay.placements.some(
+          (savedPlacement) =>
+            savedPlacement.rank === requestedPlacement.rank &&
+            savedPlacement.candidate.id === requestedPlacement.contentsId,
+        ),
+      );
+
+    if (!isSameResult) {
+      throw new ConflictException('이미 다른 결과에 사용된 playId입니다.');
+    }
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'P2002'
+    );
+  }
+
   private createdAtFilter(
     dateRange: DateRange,
   ): Pick<Prisma.WorldCupWhereInput, 'createdAt'> {
@@ -198,6 +405,16 @@ export class WorldCupsService {
     }
 
     return { createdAt: { gte: start } };
+  }
+
+  private scoreForRank(rank: number): number {
+    if (rank === 1) {
+      return 10;
+    }
+    if (rank === 2) {
+      return 7;
+    }
+    return 4;
   }
 
   private shuffle<T>(items: T[]): T[] {
