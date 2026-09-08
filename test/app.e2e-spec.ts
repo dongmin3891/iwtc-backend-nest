@@ -43,6 +43,17 @@ describe('IWTC API (e2e)', () => {
           );
         },
       );
+    const findCandidate = vi
+      .fn()
+      .mockImplementation(
+        ({ where }: { where: { id: number; worldCupId: number } }) =>
+          Promise.resolve(
+            where.worldCupId === 1
+              ? (candidates.find((candidate) => candidate.id === where.id) ??
+                  null)
+              : null,
+          ),
+      );
     type StoredPlay = {
       id: string;
       worldCupId: number;
@@ -146,16 +157,78 @@ describe('IWTC API (e2e)', () => {
           ),
         ),
     };
+    const storedComments: Array<{
+      id: number;
+      worldCupId: number;
+      candidateId: number;
+      memberId: null;
+      nickname: string;
+      body: string;
+      deletedAt: null;
+      createdAt: Date;
+    }> = [];
+    const comment = {
+      findMany: vi
+        .fn()
+        .mockImplementation(
+          ({
+            where,
+            skip,
+            take,
+          }: {
+            where: { worldCupId: number; deletedAt: null };
+            skip: number;
+            take: number;
+          }) =>
+            Promise.resolve(
+              storedComments
+                .filter(
+                  (item) =>
+                    item.worldCupId === where.worldCupId &&
+                    item.deletedAt === where.deletedAt,
+                )
+                .sort(
+                  (left, right) =>
+                    right.createdAt.getTime() - left.createdAt.getTime() ||
+                    right.id - left.id,
+                )
+                .slice(skip, skip + take),
+            ),
+        ),
+      create: vi.fn().mockImplementation(
+        ({
+          data,
+        }: {
+          data: {
+            worldCupId: number;
+            candidateId: number;
+            memberId: null;
+            nickname: string;
+            body: string;
+          };
+        }) => {
+          const created = {
+            id: storedComments.length + 1,
+            ...data,
+            deletedAt: null,
+            createdAt: new Date('2026-09-08T00:00:00.000Z'),
+          };
+          storedComments.push(created);
+          return Promise.resolve(created);
+        },
+      ),
+    };
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
       .overrideProvider(PrismaService)
       .useValue({
         worldCup: { count, findMany, findFirst },
-        candidate: { findMany: findCandidates },
+        candidate: { findMany: findCandidates, findFirst: findCandidate },
         gamePlay,
         gamePlacement,
         mediaFile,
+        comment,
         $transaction: (
           operation:
             | Promise<unknown>[]
@@ -378,6 +451,64 @@ describe('IWTC API (e2e)', () => {
           },
         ],
       });
+  });
+
+  it('GET /api/world-cups/1/comments returns an empty guest comment list', async () => {
+    await request(app.getHttpServer())
+      .get('/api/world-cups/1/comments?offset=0')
+      .expect(200)
+      .expect({
+        code: 1,
+        message: '코멘트 조회 성공',
+        data: [],
+      });
+  });
+
+  it('POST /api/world-cups/1/contents/1/comments creates a guest comment', async () => {
+    await request(app.getHttpServer())
+      .post('/api/world-cups/1/contents/1/comments')
+      .send({ body: '재미있는 월드컵이에요!', nickname: 'guest-a1' })
+      .expect(201)
+      .expect({ code: 1, message: '댓글 작성', data: null });
+
+    await request(app.getHttpServer())
+      .get('/api/world-cups/1/comments?offset=0&limit=20')
+      .expect(200)
+      .expect({
+        code: 1,
+        message: '코멘트 조회 성공',
+        data: [
+          {
+            commentId: 1,
+            commentWriterId: null,
+            writerNickname: 'guest-a1',
+            body: '재미있는 월드컵이에요!',
+            createdAt: '2026-09-08T00:00:00.000Z',
+          },
+        ],
+      });
+  });
+
+  it('rejects an empty guest comment', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/world-cups/1/contents/1/comments')
+      .send({ body: '   ', nickname: 'guest-a1' })
+      .expect(400);
+
+    expect(response.body).toMatchObject({ code: -1, data: null });
+  });
+
+  it('rejects a comment for a candidate outside the world cup', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/world-cups/1/contents/999/comments')
+      .send({ body: '댓글', nickname: 'guest-a1' })
+      .expect(404);
+
+    expect(response.body).toMatchObject({
+      code: -1,
+      message: '월드컵 후보를 찾을 수 없습니다.',
+      data: null,
+    });
   });
 
   it('GET /api/media-files/10 returns the requested thumbnail URL', async () => {

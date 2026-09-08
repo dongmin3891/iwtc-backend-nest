@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { CommentsModule } from './comments/comments.module.js';
 import { validateEnvironment } from './config/environment.js';
 import { HealthModule } from './health/health.module.js';
 import { MediaFilesModule } from './media-files/media-files.module.js';
@@ -16,6 +17,7 @@ import { WorldCupsModule } from './world-cups/world-cups.module.js';
     HealthModule,
     MediaFilesModule,
     WorldCupsModule,
+    CommentsModule,
   ],
 })
 export class AppModule {}

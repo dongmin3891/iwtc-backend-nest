@@ -37,6 +37,7 @@ model WorldCup {
   updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
   candidates  Candidate[]
   gamePlays   GamePlay[]
+  comments    Comment[]
 
   @@index([visibleType, id])
   @@index([visibleType, views])
@@ -55,6 +56,7 @@ model Candidate {
   worldCup    WorldCup        @relation(fields: [worldCupId], references: [id], onDelete: Cascade)
   mediaFile   MediaFile?      @relation(fields: [mediaFileId], references: [id], onDelete: SetNull)
   placements  GamePlacement[]
+  comments    Comment[]
 
   @@unique([worldCupId, sortOrder])
   @@index([worldCupId, visibleType])
@@ -104,4 +106,23 @@ model GamePlacement {
   @@unique([gamePlayId, candidateId])
   @@index([candidateId])
   @@map("game_placements")
+}
+
+model Comment {
+  id          Int       @id @default(autoincrement())
+  worldCupId  Int       @map("world_cup_id")
+  candidateId Int       @map("candidate_id")
+  memberId    Int?      @map("member_id")
+  nickname    String    @db.VarChar(50)
+  body        String    @db.VarChar(30)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  worldCup    WorldCup  @relation(fields: [worldCupId], references: [id], onDelete: Cascade)
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([worldCupId, deletedAt, createdAt, id])
+  @@index([candidateId])
+  @@index([memberId])
+  @@map("comments")
 }
