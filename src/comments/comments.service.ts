@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import type { MemberSummary } from '../auth/auth.types.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreateCommentDto } from './dto/create-comment.dto.js';
 import { ListCommentsQuery } from './dto/list-comments.query.js';
@@ -44,6 +49,7 @@ export class CommentsService {
     worldCupId: number,
     candidateId: number,
     request: CreateCommentDto,
+    member?: MemberSummary,
   ): Promise<null> {
     await this.ensurePublicWorldCup(worldCupId);
 
@@ -59,12 +65,17 @@ export class CommentsService {
       throw new NotFoundException('월드컵 후보를 찾을 수 없습니다.');
     }
 
+    const nickname = member?.nickname ?? request.nickname;
+    if (!nickname) {
+      throw new BadRequestException('비회원 댓글은 닉네임이 필요합니다.');
+    }
+
     await this.prisma.comment.create({
       data: {
         worldCupId,
         candidateId,
-        memberId: null,
-        nickname: request.nickname,
+        memberId: member?.id ?? null,
+        nickname,
         body: request.body,
       },
     });

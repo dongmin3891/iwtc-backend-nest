@@ -1,4 +1,4 @@
-import type { INestApplication } from '@nestjs/common';
+import { UnauthorizedException, type INestApplication } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -19,6 +19,7 @@ describe('IWTC API (e2e)', () => {
     process.env.JWT_REFRESH_TTL_SECONDS = '2592000';
 
     const { AppModule } = await import('../src/app.module.js');
+    const { AuthService } = await import('../src/auth/auth.service.js');
     const { PrismaService } = await import('../src/prisma/prisma.service.js');
 
     const count = vi.fn().mockResolvedValue(0);
@@ -167,7 +168,7 @@ describe('IWTC API (e2e)', () => {
       id: number;
       worldCupId: number;
       candidateId: number;
-      memberId: null;
+      memberId: number | null;
       nickname: string;
       body: string;
       deletedAt: null;
@@ -208,7 +209,7 @@ describe('IWTC API (e2e)', () => {
           data: {
             worldCupId: number;
             candidateId: number;
-            memberId: null;
+            memberId: number | null;
             nickname: string;
             body: string;
           };
@@ -244,6 +245,23 @@ describe('IWTC API (e2e)', () => {
             ? Promise.all(operation)
             : operation(transactionClient),
         $queryRaw: vi.fn().mockResolvedValue([{ '?column?': 1 }]),
+      })
+      .overrideProvider(AuthService)
+      .useValue({
+        authorizeAccess: vi.fn().mockImplementation((token: string) => {
+          if (token !== 'valid-member-token') {
+            return Promise.reject(
+              new UnauthorizedException(
+                '로그인이 만료되었습니다. 다시 로그인해주세요.',
+              ),
+            );
+          }
+          return Promise.resolve({
+            id: 7,
+            serviceId: 'member07',
+            nickname: '회원닉네임',
+          });
+        }),
       })
       .compile();
 
@@ -495,6 +513,44 @@ describe('IWTC API (e2e)', () => {
       });
   });
 
+  it('creates a member comment without trusting a request nickname', async () => {
+    await request(app.getHttpServer())
+      .post('/api/world-cups/1/contents/1/comments')
+      .set('access-token', 'valid-member-token')
+      .send({ body: '회원 댓글', nickname: '위조닉네임' })
+      .expect(201)
+      .expect({ code: 1, message: '댓글 작성', data: null });
+
+    const response = await request(app.getHttpServer())
+      .get('/api/world-cups/1/comments?offset=0&limit=20')
+      .expect(200);
+
+    expect(response.body.data[0]).toMatchObject({
+      commentId: 2,
+      commentWriterId: 7,
+      writerNickname: '회원닉네임',
+      body: '회원 댓글',
+    });
+  });
+
+  it('allows an authenticated member to omit the nickname', async () => {
+    await request(app.getHttpServer())
+      .post('/api/world-cups/1/contents/1/comments')
+      .set('access-token', 'valid-member-token')
+      .send({ body: '닉네임 생략 회원 댓글' })
+      .expect(201);
+  });
+
+  it('rejects an invalid token instead of treating it as a guest', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/world-cups/1/contents/1/comments')
+      .set('access-token', 'invalid-member-token')
+      .send({ body: '잘못된 토큰 댓글', nickname: 'guest-a1' })
+      .expect(401);
+
+    expect(response.body).toMatchObject({ code: -1, data: null });
+  });
+
   it('rejects an empty guest comment', async () => {
     const response = await request(app.getHttpServer())
       .post('/api/world-cups/1/contents/1/comments')
@@ -502,6 +558,19 @@ describe('IWTC API (e2e)', () => {
       .expect(400);
 
     expect(response.body).toMatchObject({ code: -1, data: null });
+  });
+
+  it('requires a nickname only for a guest comment', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/world-cups/1/contents/1/comments')
+      .send({ body: '닉네임 없는 비회원 댓글' })
+      .expect(400);
+
+    expect(response.body).toMatchObject({
+      code: -1,
+      message: '비회원 댓글은 닉네임이 필요합니다.',
+      data: null,
+    });
   });
 
   it('rejects a comment for a candidate outside the world cup', async () => {

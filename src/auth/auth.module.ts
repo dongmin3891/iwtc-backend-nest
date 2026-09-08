@@ -3,12 +3,18 @@ import { JwtModule } from '@nestjs/jwt';
 import { AccessTokenGuard } from './access-token.guard.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
+import { OptionalAccessTokenGuard } from './optional-access-token.guard.js';
 import { PasswordService } from './password.service.js';
 
 @Module({
   imports: [JwtModule.register({})],
   controllers: [AuthController],
-  providers: [AuthService, PasswordService, AccessTokenGuard],
-  exports: [AuthService, AccessTokenGuard],
+  providers: [
+    AuthService,
+    PasswordService,
+    AccessTokenGuard,
+    OptionalAccessTokenGuard,
+  ],
+  exports: [AuthService, AccessTokenGuard, OptionalAccessTokenGuard],
 })
 export class AuthModule {}

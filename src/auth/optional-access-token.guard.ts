@@ -1,16 +1,11 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import type { Request } from 'express';
 import { getAccessToken } from './access-token.js';
 import { AuthService } from './auth.service.js';
 import type { AuthenticatedRequest } from './auth.types.js';
 
 @Injectable()
-export class AccessTokenGuard implements CanActivate {
+export class OptionalAccessTokenGuard implements CanActivate {
   constructor(private readonly authService: AuthService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -18,8 +13,8 @@ export class AccessTokenGuard implements CanActivate {
       .switchToHttp()
       .getRequest<Request & Partial<AuthenticatedRequest>>();
     const accessToken = getAccessToken(request);
-    if (!accessToken) {
-      throw new UnauthorizedException('로그인이 필요합니다.');
+    if (accessToken === undefined) {
+      return true;
     }
 
     request.member = await this.authService.authorizeAccess(accessToken);

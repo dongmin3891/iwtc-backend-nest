@@ -72,6 +72,54 @@ describe('CommentsService', () => {
     });
   });
 
+  it('uses the authenticated member instead of a supplied nickname', async () => {
+    const create = vi.fn().mockResolvedValue({ id: 2 });
+    const prisma = {
+      worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 1 }) },
+      candidate: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
+      comment: { create },
+    } as unknown as PrismaService;
+    const service = new CommentsService(prisma);
+    const request = new CreateCommentDto();
+    request.body = '회원 댓글입니다';
+    request.nickname = '위조닉네임';
+
+    await expect(
+      service.create(1, 3, request, {
+        id: 7,
+        serviceId: 'member01',
+        nickname: '동민',
+      }),
+    ).resolves.toBeNull();
+    expect(create).toHaveBeenCalledWith({
+      data: {
+        worldCupId: 1,
+        candidateId: 3,
+        memberId: 7,
+        nickname: '동민',
+        body: '회원 댓글입니다',
+      },
+    });
+  });
+
+  it('requires a nickname only for a guest comment', async () => {
+    const create = vi.fn();
+    const prisma = {
+      worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 1 }) },
+      candidate: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
+      comment: { create },
+    } as unknown as PrismaService;
+    const service = new CommentsService(prisma);
+    const request = new CreateCommentDto();
+    request.body = '닉네임 없는 비회원 댓글';
+
+    await expect(service.create(1, 3, request)).rejects.toMatchObject({
+      status: 400,
+      message: '비회원 댓글은 닉네임이 필요합니다.',
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it('rejects comments for an unknown world cup', async () => {
     const prisma = {
       worldCup: { findFirst: vi.fn().mockResolvedValue(null) },
