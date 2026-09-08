@@ -149,4 +149,78 @@ describe('CommentsService', () => {
     });
     expect(create).not.toHaveBeenCalled();
   });
+
+  it('soft-deletes a comment owned by the authenticated member', async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const prisma = {
+      comment: {
+        findFirst: vi.fn().mockResolvedValue({ memberId: 7 }),
+        updateMany,
+      },
+    } as unknown as PrismaService;
+    const service = new CommentsService(prisma);
+
+    await expect(service.remove(3, 7)).resolves.toBeUndefined();
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 3, memberId: 7, deletedAt: null },
+      data: { deletedAt: expect.any(Date) },
+    });
+  });
+
+  it('rejects deletion by a member who does not own the comment', async () => {
+    const updateMany = vi.fn();
+    const prisma = {
+      comment: {
+        findFirst: vi.fn().mockResolvedValue({ memberId: 7 }),
+        updateMany,
+      },
+    } as unknown as PrismaService;
+    const service = new CommentsService(prisma);
+
+    await expect(service.remove(3, 8)).rejects.toMatchObject({
+      status: 403,
+      message: '댓글 작성자만 삭제할 수 있습니다.',
+    });
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects deletion of a guest comment', async () => {
+    const updateMany = vi.fn();
+    const prisma = {
+      comment: {
+        findFirst: vi.fn().mockResolvedValue({ memberId: null }),
+        updateMany,
+      },
+    } as unknown as PrismaService;
+    const service = new CommentsService(prisma);
+
+    await expect(service.remove(1, 7)).rejects.toMatchObject({ status: 403 });
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects deletion of a missing or already deleted comment', async () => {
+    const updateMany = vi.fn();
+    const prisma = {
+      comment: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        updateMany,
+      },
+    } as unknown as PrismaService;
+    const service = new CommentsService(prisma);
+
+    await expect(service.remove(999, 7)).rejects.toMatchObject({ status: 404 });
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects a concurrent repeated deletion', async () => {
+    const prisma = {
+      comment: {
+        findFirst: vi.fn().mockResolvedValue({ memberId: 7 }),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+    } as unknown as PrismaService;
+    const service = new CommentsService(prisma);
+
+    await expect(service.remove(3, 7)).rejects.toMatchObject({ status: 404 });
+  });
 });

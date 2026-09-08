@@ -171,7 +171,7 @@ describe('IWTC API (e2e)', () => {
       memberId: number | null;
       nickname: string;
       body: string;
-      deletedAt: null;
+      deletedAt: Date | null;
       createdAt: Date;
     }> = [];
     const comment = {
@@ -202,6 +202,17 @@ describe('IWTC API (e2e)', () => {
                 .slice(skip, skip + take),
             ),
         ),
+      findFirst: vi
+        .fn()
+        .mockImplementation(
+          ({ where }: { where: { id: number; deletedAt: null } }) =>
+            Promise.resolve(
+              storedComments.find(
+                (item) =>
+                  item.id === where.id && item.deletedAt === where.deletedAt,
+              ) ?? null,
+            ),
+        ),
       create: vi.fn().mockImplementation(
         ({
           data,
@@ -224,6 +235,29 @@ describe('IWTC API (e2e)', () => {
           return Promise.resolve(created);
         },
       ),
+      updateMany: vi
+        .fn()
+        .mockImplementation(
+          ({
+            where,
+            data,
+          }: {
+            where: { id: number; memberId: number; deletedAt: null };
+            data: { deletedAt: Date };
+          }) => {
+            const storedComment = storedComments.find(
+              (item) =>
+                item.id === where.id &&
+                item.memberId === where.memberId &&
+                item.deletedAt === where.deletedAt,
+            );
+            if (!storedComment) {
+              return Promise.resolve({ count: 0 });
+            }
+            storedComment.deletedAt = data.deletedAt;
+            return Promise.resolve({ count: 1 });
+          },
+        ),
     };
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -249,7 +283,10 @@ describe('IWTC API (e2e)', () => {
       .overrideProvider(AuthService)
       .useValue({
         authorizeAccess: vi.fn().mockImplementation((token: string) => {
-          if (token !== 'valid-member-token') {
+          if (
+            token !== 'valid-member-token' &&
+            token !== 'valid-other-member-token'
+          ) {
             return Promise.reject(
               new UnauthorizedException(
                 '로그인이 만료되었습니다. 다시 로그인해주세요.',
@@ -257,9 +294,10 @@ describe('IWTC API (e2e)', () => {
             );
           }
           return Promise.resolve({
-            id: 7,
-            serviceId: 'member07',
-            nickname: '회원닉네임',
+            id: token === 'valid-member-token' ? 7 : 8,
+            serviceId: token === 'valid-member-token' ? 'member07' : 'member08',
+            nickname:
+              token === 'valid-member-token' ? '회원닉네임' : '다른회원',
           });
         }),
       })
@@ -539,6 +577,61 @@ describe('IWTC API (e2e)', () => {
       .set('access-token', 'valid-member-token')
       .send({ body: '닉네임 생략 회원 댓글' })
       .expect(201);
+  });
+
+  it('DELETE /api/comments/:id soft-deletes an owned member comment', async () => {
+    await request(app.getHttpServer())
+      .delete('/api/comments/2')
+      .set('access-token', 'valid-member-token')
+      .expect(204)
+      .expect('');
+
+    const response = await request(app.getHttpServer())
+      .get('/api/world-cups/1/comments?offset=0&limit=20')
+      .expect(200);
+
+    expect(response.body.data).not.toContainEqual(
+      expect.objectContaining({ commentId: 2 }),
+    );
+  });
+
+  it('rejects deletion without authentication', async () => {
+    const response = await request(app.getHttpServer())
+      .delete('/api/comments/3')
+      .expect(401);
+
+    expect(response.body).toMatchObject({
+      code: -1,
+      message: '로그인이 필요합니다.',
+      data: null,
+    });
+  });
+
+  it('rejects deletion by a different member', async () => {
+    const response = await request(app.getHttpServer())
+      .delete('/api/comments/3')
+      .set('access-token', 'valid-other-member-token')
+      .expect(403);
+
+    expect(response.body).toMatchObject({
+      code: -1,
+      message: '댓글 작성자만 삭제할 수 있습니다.',
+      data: null,
+    });
+  });
+
+  it('rejects deletion of a guest comment', async () => {
+    await request(app.getHttpServer())
+      .delete('/api/comments/1')
+      .set('access-token', 'valid-member-token')
+      .expect(403);
+  });
+
+  it('returns not found when deleting an already deleted comment', async () => {
+    await request(app.getHttpServer())
+      .delete('/api/comments/2')
+      .set('access-token', 'valid-member-token')
+      .expect(404);
   });
 
   it('rejects an invalid token instead of treating it as a guest', async () => {
