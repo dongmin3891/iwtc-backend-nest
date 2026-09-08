@@ -17,13 +17,13 @@
 
 | 용도 | 저장소 | 기준 브랜치 | 기능 기준 커밋 |
 | --- | --- | --- | --- |
-| 신규 백엔드 | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main` | `98406e8` |
-| 프론트엔드 | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project` | `35bb96d` |
+| 신규 백엔드 | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main` | `ac1f5ce` |
+| 프론트엔드 | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project` | `9474c71` |
 | 기존 Spring 참고용 | `https://github.com/dongmin3891/iwtc-backend-new.git` | `codex/nest-migration-plan` | `3703d2d` |
 
 신규 개발 코드는 `iwtc-backend-nest`에 작성한다. `iwtc-backend-new`를 신규 서버로 배포하지 않는다.
 
-게임 결과·랭킹·미디어 구현과 프론트엔드의 새 게임 완료 요청 계약은 각 원격 기준 브랜치에 push되어 있다. `iwtc.code-workspace`는 신규 백엔드 작업 트리에만 있는 로컬 편의 파일이며 커밋하지 않았다.
+게임 결과·랭킹·미디어·비회원 댓글 구현과 프론트엔드의 게임 완료·댓글 화면 수정은 각 원격 기준 브랜치에 push되어 있다. `iwtc.code-workspace`는 신규 백엔드 작업 트리에만 있는 로컬 편의 파일이며 커밋하지 않았다.
 
 ## 3. 새 환경에 내려받기
 
@@ -132,6 +132,8 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 - `playId` 기반 중복 제출 방지
 - 누적 점수 기반 게임 결과 랭킹 조회
 - 미디어 메타데이터 저장 모델과 공개 URL 조회
+- 비회원 댓글 작성과 최신순 댓글 목록 조회
+- 댓글 본문·닉네임 검증과 공개 후보 소속 확인
 
 현재 API:
 
@@ -145,12 +147,16 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 | POST | `/api/world-cups/{worldCupId}/clear` | 완료 |
 | GET | `/api/world-cups/{worldCupId}/game-result-contents` | 완료 |
 | GET | `/api/media-files/{mediaFileId}` | 완료 |
+| GET | `/api/world-cups/{worldCupId}/comments` | 완료 |
+| POST | `/api/world-cups/{worldCupId}/contents/{contentsId}/comments` | 완료 |
 
 개발용 seed는 공개 월드컵 1개와 `후보 A`부터 `후보 D`까지 총 4개 후보를 만든다. 후보 ID는 실행 환경에 따라 달라질 수 있으므로 코드에서 특정 ID를 전제로 사용하지 않는다.
 
 게임 결과는 `GamePlay`와 `GamePlacement`에 저장한다. `playId`는 UUID v4이며 같은 결과의 재요청은 기존 결과를 반환하고, 같은 `playId`를 다른 결과에 사용하면 HTTP 409를 반환한다. 랭킹은 후보별 누적 점수로 계산하고 동점 후보에게 같은 순위를 부여한다.
 
 미디어는 PostgreSQL에 메타데이터와 object key만 저장한다. 정적 파일 응답은 `MEDIA_PUBLIC_BASE_URL` 기반의 공개 URL이며 `size=divide2`에 썸네일 key가 없으면 원본 URL로 대체한다. 현재 Compose에는 실제 S3 호환 오브젝트 스토리지가 포함되어 있지 않으므로 운영·로컬 저장소 공급자는 별도로 구성해야 한다.
+
+댓글은 현재 비회원 작성을 허용한다. 본문은 공백 제거 후 1~30자, 닉네임은 1~50자로 검증하고 `memberId`는 `null`로 저장한다. 작성 대상 후보가 공개 상태이며 요청 월드컵에 속하는지 확인한다. 목록은 `createdAt DESC, id DESC`로 안정적으로 정렬하며 `offset`은 건너뛸 행 수, `limit`은 조회 수다. 기본 `limit`은 20이고 최대 100이다. 운영 공개 전 rate limit과 스팸 방지 정책이 필요하다.
 
 ## 8. 현재 확인된 사용자 흐름
 
@@ -162,10 +168,13 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 4. 후보 4명으로 준결승 두 경기 진행
 5. 탈락 후보 ID를 제외해 결승 후보 2명 재조회
 6. 결승 대진 화면 표시
+7. 우승자 선택 후 게임 결과 저장
+8. 누적 랭킹 갱신과 우승 결과 화면 표시
+9. 비회원 댓글 작성, 최신순 재조회, 입력창 초기화
 
 후보에 연결된 실제 이미지가 아직 없으므로 현재는 프론트엔드 기본 이미지가 표시된다.
 
-게임 완료 저장, 누적 랭킹, 미디어 조회는 자동화 테스트로 검증했다. 새 migration을 실제 로컬 PostgreSQL에 적용한 뒤 게임 완료 화면과 랭킹 갱신까지 이어지는 브라우저 흐름은 아직 다시 확인하지 않았다.
+게임 결과·미디어·댓글 migration을 실제 로컬 PostgreSQL에 적용했다. 게임 완료 저장, 누적 랭킹 갱신, 댓글 작성과 목록 재조회까지 이어지는 브라우저 흐름을 확인했다. 미디어 조회는 자동화 테스트로 검증했으며 실제 오브젝트 스토리지는 아직 연결하지 않았다.
 
 ## 9. 검증 명령
 
@@ -178,7 +187,7 @@ npm run test:e2e
 npm run build
 ```
 
-마지막 작업 기준으로 린트, 빌드, 단위 테스트 27개, API 통합 테스트 14개가 모두 통과했다.
+마지막 작업 기준으로 Prisma 검증, 린트, Node.js 24.19 빌드, 단위 테스트 31개, API 통합 테스트 18개가 모두 통과했다.
 
 프론트엔드:
 
@@ -201,31 +210,37 @@ npm test
 
 ## 11. 다음 작업
 
-가장 자연스러운 다음 작업은 월드컵과 후보별 댓글 조회·작성 API를 구현하는 것이다.
+가장 자연스러운 다음 작업은 회원가입·로그인과 토큰 재발급·로그아웃을 구현하는 것이다.
 
 ```http
-GET /api/world-cups/{worldCupId}/comments?offset=0
-POST /api/world-cups/{worldCupId}/contents/{contentsId}/comments
+POST /api/members/sign-up
+POST /api/members/sign-in
+GET /api/members/me/summary
+POST /api/new-access-token
+GET /api/members/sign-out
 ```
 
-현재 프론트엔드는 댓글 목록에 `commentId`, `commentWriterId`, `writerNickname`, `body`, `createdAt`을 기대한다. 작성 요청은 `body`와 `nickname`을 보내며 `body`는 기존 계약상 1~30자다. 회원·인증 기능이 아직 없으므로 구현 전에 아래 정책을 확정해야 한다.
+기존 회원 데이터와 비밀번호 해시는 가져오지 않고 새 회원 데이터로 시작한다. 구현 전에 아래 계약을 먼저 확정해야 한다.
 
-- 첫 댓글 버전에서 비회원 작성을 허용할지
-- 비회원 nickname을 클라이언트 값 그대로 신뢰할지 서버에서 발급할지
-- `offset`만 유지할지 `limit`과 안정적인 정렬 기준을 함께 도입할지
-- 후보가 해당 월드컵에 속하는지와 공개 상태를 어떻게 검증할지
-- 댓글 수정·삭제와 신고 기능을 어느 단계에서 추가할지
+- 로그인 ID 필드명을 `username` 또는 기존 `serviceId` 중 무엇으로 통일할지
+- 비밀번호 해시 알고리즘과 최소 비밀번호 규칙
+- access token은 기존 `access-token` 헤더 호환을 유지할지
+- refresh token을 HttpOnly·Secure cookie로 전달할지
+- refresh token rotation, family, 재사용 감지와 폐기 방식
+- 로그아웃을 GET에서 POST로 바꾸고 프론트와 함께 수정할지
+- 인증된 댓글은 요청 nickname 대신 회원 nickname을 서버에서 사용할지
 
 그다음 우선순위는 다음과 같다.
 
-1. 댓글 API
-2. 회원가입·로그인과 refresh token rotation
+1. 회원가입·로그인과 refresh token rotation
+2. 인증 댓글 작성자 연결과 댓글 삭제 정책
 3. 월드컵·후보 관리 API
-4. GitHub Actions, GHCR, Kubernetes, Argo CD 배포
-5. PostgreSQL 백업과 복구 테스트
+4. 실제 S3 호환 오브젝트 스토리지와 미디어 업로드
+5. GitHub Actions, GHCR, Kubernetes, Argo CD 배포
+6. PostgreSQL 백업과 복구 테스트
 
 ## 12. 새 작업을 시작할 때 전달할 내용
 
 새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
 
-> `iwtc-backend-nest/HANDOFF.md`와 기존 참고 저장소의 `API_CONTRACT.md`를 먼저 읽어줘. 기존 DB와 비밀번호는 사용하지 않고 PostgreSQL 새 데이터 기준으로 진행한다. 현재 완료된 API와 테스트를 확인한 뒤 댓글 조회·작성 계약부터 검토하고 구현해줘. 프론트엔드는 `iwtc-frontend-new`의 `refactor/full-project` 브랜치를 기준으로 실제 요청 형식을 확인해줘.
+> `iwtc-backend-nest/HANDOFF.md`와 기존 참고 저장소의 `API_CONTRACT.md`를 먼저 읽어줘. 기존 DB, 회원 데이터와 비밀번호는 사용하지 않고 PostgreSQL 새 데이터 기준으로 진행한다. 현재 완료된 API와 테스트를 확인한 뒤 회원가입·로그인·refresh token rotation 계약부터 검토해줘. 프론트엔드는 `iwtc-frontend-new`의 `refactor/full-project` 브랜치를 기준으로 실제 요청 형식을 확인해줘.

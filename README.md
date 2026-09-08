@@ -17,6 +17,8 @@ IWTC 프론트엔드의 API를 새 PostgreSQL 데이터베이스 기준으로 �
 - 월드컵 게임 결과 저장: `POST /api/world-cups/{worldCupId}/clear`
 - 월드컵 게임 결과 랭킹: `GET /api/world-cups/{worldCupId}/game-result-contents`
 - 미디어 파일 조회: `GET /api/media-files/{mediaFileId}`
+- 월드컵 댓글 목록: `GET /api/world-cups/{worldCupId}/comments`
+- 월드컵 후보 댓글 작성: `POST /api/world-cups/{worldCupId}/contents/{contentsId}/comments`
 - 재현 가능한 개발용 seed
 
 Prisma 8은 프로젝트 생성 시점에 npm에서 RC 버전만 제공되므로 운영 안정성을 위해 7.10으로 고정했습니다. Prisma 8 정식판 출시 후 별도 업그레이드로 진행합니다.
@@ -42,6 +44,8 @@ PostgreSQL 18 공식 이미지의 데이터 볼륨 기준에 맞춰 컨테이너
 `.env.example`의 비밀번호는 로컬 개발 전용 예시입니다. 운영 서버에서는 새로 만든 긴 무작위 비밀번호를 사용하고 Git 저장소에 커밋하지 않습니다.
 
 정적 미디어의 실제 파일은 PostgreSQL이 아니라 S3 호환 오브젝트 스토리지에 저장합니다. DB에는 메타데이터와 원본·썸네일 object key만 저장하며, 조회 API는 `MEDIA_PUBLIC_BASE_URL`을 기준으로 공개 HTTPS URL을 반환합니다. `size=divide2` 요청에 썸네일이 없으면 원본 URL을 반환합니다.
+
+현재 댓글은 비회원 작성을 허용합니다. 본문은 공백 제거 후 1~30자, 닉네임은 1~50자로 검증하며 작성자 회원 ID는 `null`로 저장합니다. 목록은 최신순으로 정렬하고 `offset`과 `limit`을 지원합니다. 회원 인증 구현 후 로그인 댓글의 작성자 정보와 수정·삭제 정책을 추가합니다.
 
 ## 주요 명령
 
