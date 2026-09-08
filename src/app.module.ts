@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { AuthModule } from './auth/auth.module.js';
 import { CommentsModule } from './comments/comments.module.js';
 import { validateEnvironment } from './config/environment.js';
 import { HealthModule } from './health/health.module.js';
@@ -14,6 +15,7 @@ import { WorldCupsModule } from './world-cups/world-cups.module.js';
       validate: validateEnvironment,
     }),
     PrismaModule,
+    AuthModule,
     HealthModule,
     MediaFilesModule,
     WorldCupsModule,

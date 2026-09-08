@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import cookieParser from 'cookie-parser';
 import { HttpExceptionFilter } from './common/http-exception.filter.js';
 
 export function configureApp(app: INestApplication): void {
@@ -23,10 +24,12 @@ export function configureApp(app: INestApplication): void {
       forbidNonWhitelisted: true,
     }),
   );
+  app.use(cookieParser());
   app.useGlobalFilters(new HttpExceptionFilter());
   app.enableCors({
     origin: config.get<string[]>('CORS_ORIGINS'),
     credentials: true,
+    exposedHeaders: ['access-token'],
   });
   app.enableShutdownHooks();
 

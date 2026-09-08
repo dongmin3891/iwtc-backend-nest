@@ -6,6 +6,10 @@ export interface Environment {
   DATABASE_URL: string;
   CORS_ORIGINS: string[];
   MEDIA_PUBLIC_BASE_URL: string;
+  JWT_ACCESS_SECRET: string;
+  JWT_REFRESH_SECRET: string;
+  JWT_ACCESS_TTL_SECONDS: number;
+  JWT_REFRESH_TTL_SECONDS: number;
 }
 
 export function validateEnvironment(
@@ -43,6 +47,29 @@ export function validateEnvironment(
     throw new Error('운영 MEDIA_PUBLIC_BASE_URL은 HTTPS URL이어야 합니다.');
   }
 
+  const jwtAccessSecret = String(raw.JWT_ACCESS_SECRET ?? '');
+  const jwtRefreshSecret = String(raw.JWT_REFRESH_SECRET ?? '');
+  if (jwtAccessSecret.length < 32 || jwtRefreshSecret.length < 32) {
+    throw new Error('JWT secret은 각각 32자 이상이어야 합니다.');
+  }
+  if (jwtAccessSecret === jwtRefreshSecret) {
+    throw new Error('access token과 refresh token의 secret은 달라야 합니다.');
+  }
+
+  const jwtAccessTtlSeconds = Number(raw.JWT_ACCESS_TTL_SECONDS ?? 900);
+  const jwtRefreshTtlSeconds = Number(raw.JWT_REFRESH_TTL_SECONDS ?? 2592000);
+  if (!Number.isInteger(jwtAccessTtlSeconds) || jwtAccessTtlSeconds < 60) {
+    throw new Error('JWT_ACCESS_TTL_SECONDS는 60 이상의 정수여야 합니다.');
+  }
+  if (
+    !Number.isInteger(jwtRefreshTtlSeconds) ||
+    jwtRefreshTtlSeconds < jwtAccessTtlSeconds
+  ) {
+    throw new Error(
+      'JWT_REFRESH_TTL_SECONDS는 access token 수명 이상의 정수여야 합니다.',
+    );
+  }
+
   return {
     ...raw,
     NODE_ENV: nodeEnv as Environment['NODE_ENV'],
@@ -50,5 +77,9 @@ export function validateEnvironment(
     DATABASE_URL: databaseUrl,
     CORS_ORIGINS: corsOrigins,
     MEDIA_PUBLIC_BASE_URL: mediaPublicBaseUrl,
+    JWT_ACCESS_SECRET: jwtAccessSecret,
+    JWT_REFRESH_SECRET: jwtRefreshSecret,
+    JWT_ACCESS_TTL_SECONDS: jwtAccessTtlSeconds,
+    JWT_REFRESH_TTL_SECONDS: jwtRefreshTtlSeconds,
   };
 }

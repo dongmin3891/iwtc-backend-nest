@@ -11,6 +11,12 @@ describe('IWTC API (e2e)', () => {
     process.env.NODE_ENV = 'test';
     process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test';
     process.env.MEDIA_PUBLIC_BASE_URL = 'https://media.example.com/iwtc';
+    process.env.JWT_ACCESS_SECRET =
+      'test-access-secret-with-at-least-32-characters';
+    process.env.JWT_REFRESH_SECRET =
+      'test-refresh-secret-with-at-least-32-characters';
+    process.env.JWT_ACCESS_TTL_SECONDS = '900';
+    process.env.JWT_REFRESH_TTL_SECONDS = '2592000';
 
     const { AppModule } = await import('../src/app.module.js');
     const { PrismaService } = await import('../src/prisma/prisma.service.js');

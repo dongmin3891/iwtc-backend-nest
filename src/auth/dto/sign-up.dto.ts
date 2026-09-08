@@ -1,0 +1,29 @@
+import { Transform } from 'class-transformer';
+import { IsAlphanumeric, IsString, Length, Matches } from 'class-validator';
+
+export const PASSWORD_PATTERN =
+  /^(?=.*[A-Za-z])(?=.*\d)(?=.*[~`!@#$%^&*()_+\-=])[A-Za-z\d~`!@#$%^&*()_+\-=]{8,16}$/;
+
+export class SignUpDto {
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  @IsString()
+  @Length(6, 10, { message: '아이디는 6~10자로 입력해주세요.' })
+  @IsAlphanumeric('en-US', {
+    message: '아이디는 영문과 숫자만 사용할 수 있습니다.',
+  })
+  serviceId: string;
+
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @Length(2, 10, { message: '닉네임은 2~10자로 입력해주세요.' })
+  @Matches(/^\S+$/, { message: '닉네임에는 공백을 사용할 수 없습니다.' })
+  nickname: string;
+
+  @IsString()
+  @Matches(PASSWORD_PATTERN, {
+    message: '비밀번호는 8~16자의 영문, 숫자, 특수문자를 각각 포함해야 합니다.',
+  })
+  password: string;
+}
