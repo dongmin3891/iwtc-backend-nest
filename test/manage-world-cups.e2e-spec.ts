@@ -1,4 +1,4 @@
-import type { INestApplication } from '@nestjs/common';
+import { NotFoundException, type INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
 import request from 'supertest';
@@ -10,6 +10,36 @@ import { ManageWorldCupContentsController } from '../src/manage-world-cups/manag
 import { ManageWorldCupContentsService } from '../src/manage-world-cups/manage-world-cup-contents.service.js';
 import { ManageWorldCupsController } from '../src/manage-world-cups/manage-world-cups.controller.js';
 import { ManageWorldCupsService } from '../src/manage-world-cups/manage-world-cups.service.js';
+
+function createContentsRequest(): object {
+  return {
+    data: [
+      {
+        contentsName: '  후보 A  ',
+        visibleType: 'PRIVATE',
+        createMediaFileRequest: {
+          fileType: 'INTERNET_VIDEO_URL',
+          mediaData: '  https://www.youtube.com/watch?v=video-a  ',
+          originalName: '  ignored-name  ',
+          videoStartTime: '  00030  ',
+          videoPlayDuration: 3,
+          detailFileType: 'YOU_TUBE_URL',
+        },
+      },
+      {
+        contentsName: '후보 B',
+        visibleType: 'PUBLIC',
+        createMediaFileRequest: {
+          fileType: 'INTERNET_VIDEO_URL',
+          mediaData: 'https://www.youtube.com/watch?v=video-b',
+          videoStartTime: '00045',
+          videoPlayDuration: 5,
+          detailFileType: 'YOU_TUBE_URL',
+        },
+      },
+    ],
+  };
+}
 
 describe('Manage world cups API (e2e)', () => {
   let app: INestApplication<App>;
@@ -40,6 +70,7 @@ describe('Manage world cups API (e2e)', () => {
     }),
   };
   const manageWorldCupContentsService = {
+    createMany: vi.fn().mockResolvedValue([51, 52]),
     findAll: vi.fn().mockResolvedValue([
       {
         contentsId: 31,
@@ -187,6 +218,88 @@ describe('Manage world cups API (e2e)', () => {
       .expect(401);
 
     expect(manageWorldCupContentsService.findAll).not.toHaveBeenCalled();
+  });
+
+  it('creates validated candidates for an owned world cup', async () => {
+    await request(app.getHttpServer())
+      .post('/api/me/game-contents-manage/world-cups/3/contents')
+      .set('access-token', 'valid-token')
+      .send(createContentsRequest())
+      .expect(201)
+      .expect({ code: 1, message: '게임 생성', data: null });
+
+    expect(manageWorldCupContentsService.createMany).toHaveBeenCalledWith(
+      7,
+      3,
+      [
+        {
+          contentsName: '후보 A',
+          visibleType: 'PRIVATE',
+          createMediaFileRequest: {
+            fileType: 'INTERNET_VIDEO_URL',
+            mediaData: 'https://www.youtube.com/watch?v=video-a',
+            originalName: 'ignored-name',
+            videoStartTime: '00030',
+            videoPlayDuration: 3,
+            detailFileType: 'YOU_TUBE_URL',
+          },
+        },
+        {
+          contentsName: '후보 B',
+          visibleType: 'PUBLIC',
+          createMediaFileRequest: {
+            fileType: 'INTERNET_VIDEO_URL',
+            mediaData: 'https://www.youtube.com/watch?v=video-b',
+            videoStartTime: '00045',
+            videoPlayDuration: 5,
+            detailFileType: 'YOU_TUBE_URL',
+          },
+        },
+      ],
+    );
+  });
+
+  it('requires authentication before creating candidates', async () => {
+    await request(app.getHttpServer())
+      .post('/api/me/game-contents-manage/world-cups/3/contents')
+      .send(createContentsRequest())
+      .expect(401)
+      .expect({ code: -1, message: '로그인이 필요합니다.', data: null });
+
+    expect(manageWorldCupContentsService.createMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid candidates before calling the storage service', async () => {
+    await request(app.getHttpServer())
+      .post('/api/me/game-contents-manage/world-cups/3/contents')
+      .set('access-token', 'valid-token')
+      .send({ data: [] })
+      .expect(400);
+
+    expect(manageWorldCupContentsService.createMany).not.toHaveBeenCalled();
+  });
+
+  it('does not reveal another member world cup while creating candidates', async () => {
+    manageWorldCupContentsService.createMany.mockRejectedValueOnce(
+      new NotFoundException('월드컵을 찾을 수 없습니다.'),
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/me/game-contents-manage/world-cups/99/contents')
+      .set('access-token', 'valid-token')
+      .send(createContentsRequest())
+      .expect(404)
+      .expect({
+        code: -1,
+        message: '월드컵을 찾을 수 없습니다.',
+        data: null,
+      });
+
+    expect(manageWorldCupContentsService.createMany).toHaveBeenCalledWith(
+      7,
+      99,
+      expect.any(Array),
+    );
   });
 
   afterAll(async () => {
