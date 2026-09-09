@@ -1,12 +1,16 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
   ParseIntPipe,
+  Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
+  ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -17,6 +21,7 @@ import type { Request } from 'express';
 import { AccessTokenGuard } from '../auth/access-token.guard.js';
 import type { AuthenticatedRequest } from '../auth/auth.types.js';
 import { success, type ApiResponse } from '../common/api-response.js';
+import { CreateWorldCupContentsDto } from './dto/create-world-cup-contents.dto.js';
 import { ManageWorldCupContentsService } from './manage-world-cup-contents.service.js';
 import type { ManagedWorldCupContent } from './manage-world-cup-contents.types.js';
 
@@ -28,6 +33,24 @@ export class ManageWorldCupContentsController {
   constructor(
     private readonly manageWorldCupContentsService: ManageWorldCupContentsService,
   ) {}
+
+  @Post(':worldCupId/contents')
+  @ApiOperation({ summary: '내 월드컵 후보 일괄 생성' })
+  @ApiCreatedResponse({ description: '게임 생성' })
+  @ApiBadRequestResponse({ description: '후보 생성 요청이 올바르지 않음' })
+  @ApiNotFoundResponse({ description: '소유한 월드컵을 찾을 수 없음' })
+  async create(
+    @Param('worldCupId', ParseIntPipe) worldCupId: number,
+    @Body() body: CreateWorldCupContentsDto,
+    @Req() request: Request & AuthenticatedRequest,
+  ): Promise<ApiResponse<null>> {
+    await this.manageWorldCupContentsService.createMany(
+      request.member.id,
+      worldCupId,
+      body.data,
+    );
+    return success('게임 생성', null);
+  }
 
   @Get(':worldCupId/manage-contents')
   @ApiOperation({ summary: '내 월드컵의 관리용 후보 목록 조회' })
