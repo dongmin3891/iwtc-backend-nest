@@ -41,6 +41,18 @@ function createContentsRequest(): object {
   };
 }
 
+function updateContentsRequest(): object {
+  return {
+    contentsName: '  수정 후보  ',
+    originalName: '  ignored-name  ',
+    mediaData: '  https://www.youtube.com/watch?v=updated-video  ',
+    detailFileType: 'YOU_TUBE_URL',
+    videoStartTime: '  00120  ',
+    videoPlayDuration: '5',
+    visibleType: 'PUBLIC',
+  };
+}
+
 describe('Manage world cups API (e2e)', () => {
   let app: INestApplication<App>;
   const manageWorldCupsService = {
@@ -71,6 +83,7 @@ describe('Manage world cups API (e2e)', () => {
   };
   const manageWorldCupContentsService = {
     createMany: vi.fn().mockResolvedValue([51, 52]),
+    updateOne: vi.fn().mockResolvedValue(31),
     findAll: vi.fn().mockResolvedValue([
       {
         contentsId: 31,
@@ -299,6 +312,101 @@ describe('Manage world cups API (e2e)', () => {
       7,
       99,
       expect.any(Array),
+    );
+  });
+
+  it('updates a validated candidate for an owned world cup', async () => {
+    await request(app.getHttpServer())
+      .put('/api/me/game-contents-manage/world-cups/3/contents/31')
+      .set('access-token', 'valid-token')
+      .send(updateContentsRequest())
+      .expect(204);
+
+    expect(manageWorldCupContentsService.updateOne).toHaveBeenCalledWith(
+      7,
+      3,
+      31,
+      {
+        contentsName: '수정 후보',
+        originalName: 'ignored-name',
+        mediaData: 'https://www.youtube.com/watch?v=updated-video',
+        detailFileType: 'YOU_TUBE_URL',
+        videoStartTime: '00120',
+        videoPlayDuration: 5,
+        visibleType: 'PUBLIC',
+      },
+    );
+  });
+
+  it('requires authentication before updating a candidate', async () => {
+    await request(app.getHttpServer())
+      .put('/api/me/game-contents-manage/world-cups/3/contents/31')
+      .send(updateContentsRequest())
+      .expect(401)
+      .expect({ code: -1, message: '로그인이 필요합니다.', data: null });
+
+    expect(manageWorldCupContentsService.updateOne).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid candidate update before calling the service', async () => {
+    await request(app.getHttpServer())
+      .put('/api/me/game-contents-manage/world-cups/3/contents/31')
+      .set('access-token', 'valid-token')
+      .send({
+        ...updateContentsRequest(),
+        mediaData: 'https://example.com/video',
+        detailFileType: 'PNG',
+      })
+      .expect(400);
+
+    expect(manageWorldCupContentsService.updateOne).not.toHaveBeenCalled();
+  });
+
+  it('does not reveal another member world cup while updating a candidate', async () => {
+    manageWorldCupContentsService.updateOne.mockRejectedValueOnce(
+      new NotFoundException('월드컵을 찾을 수 없습니다.'),
+    );
+
+    await request(app.getHttpServer())
+      .put('/api/me/game-contents-manage/world-cups/99/contents/31')
+      .set('access-token', 'valid-token')
+      .send(updateContentsRequest())
+      .expect(404)
+      .expect({
+        code: -1,
+        message: '월드컵을 찾을 수 없습니다.',
+        data: null,
+      });
+
+    expect(manageWorldCupContentsService.updateOne).toHaveBeenCalledWith(
+      7,
+      99,
+      31,
+      expect.any(Object),
+    );
+  });
+
+  it('returns not found for a missing candidate', async () => {
+    manageWorldCupContentsService.updateOne.mockRejectedValueOnce(
+      new NotFoundException('월드컵 후보를 찾을 수 없습니다.'),
+    );
+
+    await request(app.getHttpServer())
+      .put('/api/me/game-contents-manage/world-cups/3/contents/999')
+      .set('access-token', 'valid-token')
+      .send(updateContentsRequest())
+      .expect(404)
+      .expect({
+        code: -1,
+        message: '월드컵 후보를 찾을 수 없습니다.',
+        data: null,
+      });
+
+    expect(manageWorldCupContentsService.updateOne).toHaveBeenCalledWith(
+      7,
+      3,
+      999,
+      expect.any(Object),
     );
   });
 

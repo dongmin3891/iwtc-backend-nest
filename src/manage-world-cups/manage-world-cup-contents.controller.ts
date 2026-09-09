@@ -2,9 +2,12 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseIntPipe,
   Post,
+  Put,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -12,6 +15,7 @@ import {
   ApiBadRequestResponse,
   ApiCreatedResponse,
   ApiNotFoundResponse,
+  ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -22,6 +26,7 @@ import { AccessTokenGuard } from '../auth/access-token.guard.js';
 import type { AuthenticatedRequest } from '../auth/auth.types.js';
 import { success, type ApiResponse } from '../common/api-response.js';
 import { CreateWorldCupContentsDto } from './dto/create-world-cup-contents.dto.js';
+import { UpdateWorldCupContentsDto } from './dto/update-world-cup-contents.dto.js';
 import { ManageWorldCupContentsService } from './manage-world-cup-contents.service.js';
 import type { ManagedWorldCupContent } from './manage-world-cup-contents.types.js';
 
@@ -50,6 +55,28 @@ export class ManageWorldCupContentsController {
       body.data,
     );
     return success('게임 생성', null);
+  }
+
+  @Put(':worldCupId/contents/:contentsId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: '내 월드컵 후보 수정' })
+  @ApiNoContentResponse({ description: '후보 수정 성공' })
+  @ApiBadRequestResponse({ description: '후보 수정 요청이 올바르지 않음' })
+  @ApiNotFoundResponse({
+    description: '소유한 월드컵, 후보 또는 미디어를 찾을 수 없음',
+  })
+  async update(
+    @Param('worldCupId', ParseIntPipe) worldCupId: number,
+    @Param('contentsId', ParseIntPipe) contentsId: number,
+    @Body() body: UpdateWorldCupContentsDto,
+    @Req() request: Request & AuthenticatedRequest,
+  ): Promise<void> {
+    await this.manageWorldCupContentsService.updateOne(
+      request.member.id,
+      worldCupId,
+      contentsId,
+      body,
+    );
   }
 
   @Get(':worldCupId/manage-contents')
