@@ -56,17 +56,17 @@ openssl rand -base64 48
 
 정적 미디어의 실제 파일은 PostgreSQL이 아니라 S3 호환 오브젝트 스토리지에 저장합니다. DB에는 메타데이터와 원본·썸네일 object key만 저장하며, 조회 API는 `MEDIA_PUBLIC_BASE_URL`을 기준으로 공개 HTTPS URL을 반환합니다. `size=divide2` 요청에 썸네일이 없으면 원본 URL을 반환합니다.
 
-댓글은 회원과 비회원 모두 작성할 수 있습니다. 비회원은 닉네임이 필수이고 작성자 회원 ID를 `null`로 저장합니다. 회원은 `access-token` 헤더로 확인한 서버의 회원 ID와 닉네임을 저장하므로 요청 본문의 닉네임은 생략할 수 있고, 전달해도 사용하지 않습니다. 토큰 헤더가 없으면 비회원 요청으로 처리하지만, 유효하지 않은 토큰을 전달하면 비회원으로 낮추지 않고 HTTP 401을 반환합니다. 본문은 공백 제거 후 1~30자, 비회원 닉네임은 1~50자로 검증합니다. 목록은 최신순으로 정렬하고 `offset`과 `limit`을 지원합니다. 회원 댓글은 작성 회원만 소프트 삭제할 수 있습니다.
+댓글은 회원과 비회원 모두 작성할 수 있습니다. 비회원은 닉네임이 필수이고 작성자 회원 ID를 `null`로 저장합니다. 회원은 `access-token` 헤더로 확인한 서버의 회원 ID와 닉네임을 저장하므로 요청 본문의 닉네임은 생략할 수 있고, 전달해도 사용하지 않습니다. 토큰 헤더가 없으면 비회원 요청으로 처리하지만, 유효하지 않은 토큰을 전달하면 비회원으로 낮추지 않고 HTTP 401을 반환합니다. 본문은 공백 제거 후 1–30자, 비회원 닉네임은 1–50자로 검증합니다. 목록은 최신순으로 정렬하고 `offset`과 `limit`을 지원합니다. 회원 댓글은 작성 회원만 소프트 삭제할 수 있습니다.
 
 ## 월드컵 관리
 
 월드컵 관리 API는 모두 로그인이 필요합니다. 생성 시 access token으로 확인한 회원 ID를 소유자로 저장하며, 목록과 상세 조회도 요청 회원이 소유한 월드컵만 반환합니다. 다른 회원의 월드컵 상세는 존재 여부를 노출하지 않고 HTTP 404를 반환합니다.
 
-| Method | 경로 | 설명 |
-| --- | --- | --- |
-| GET | `/api/me/game-manage/world-cups` | 내 월드컵 목록 |
-| GET | `/api/me/game-manage/world-cups/{worldCupId}` | 내 월드컵 상세 |
-| POST | `/api/me/game-manage/world-cups` | 내 월드컵 생성 |
+| Method | 경로                                          | 설명           |
+| ------ | --------------------------------------------- | -------------- |
+| GET    | `/api/me/game-manage/world-cups`              | 내 월드컵 목록 |
+| GET    | `/api/me/game-manage/world-cups/{worldCupId}` | 내 월드컵 상세 |
+| POST   | `/api/me/game-manage/world-cups`              | 내 월드컵 생성 |
 
 ## 회원 인증
 
@@ -84,13 +84,13 @@ openssl rand -base64 48
 
 인증 API는 다음과 같습니다.
 
-| Method | 경로 | 설명 |
-| --- | --- | --- |
-| POST | `/api/members/sign-up` | 회원가입 |
-| POST | `/api/members/sign-in` | 로그인 |
-| GET | `/api/members/me/summary` | 내 회원 정보 조회 |
-| POST | `/api/new-access-token` | access·refresh token 회전 |
-| POST | `/api/members/sign-out` | 로그아웃 |
+| Method | 경로                      | 설명                      |
+| ------ | ------------------------- | ------------------------- |
+| POST   | `/api/members/sign-up`    | 회원가입                  |
+| POST   | `/api/members/sign-in`    | 로그인                    |
+| GET    | `/api/members/me/summary` | 내 회원 정보 조회         |
+| POST   | `/api/new-access-token`   | access·refresh token 회전 |
+| POST   | `/api/members/sign-out`   | 로그아웃                  |
 
 ## 주요 명령
 

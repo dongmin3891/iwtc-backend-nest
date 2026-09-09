@@ -1,6 +1,6 @@
 # IWTC 개발 인수인계
 
-마지막 확인일: 2026-09-08
+마지막 확인일: 2026-09-09
 
 이 문서는 다른 컴퓨터나 새 Cursor 환경에서 IWTC 개발을 바로 이어가기 위한 현재 상태와 실행 절차를 정리한다.
 
@@ -17,13 +17,13 @@
 
 | 용도               | 저장소                                                 | 기준 브랜치                 | 기능 기준 커밋 |
 | ------------------ | ------------------------------------------------------ | --------------------------- | -------------- |
-| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `0d20ad9`      |
+| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `23e80eb`      |
 | 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `0d7f475`      |
 | 기존 Spring 참고용 | `https://github.com/dongmin3891/iwtc-backend-new.git`  | `codex/nest-migration-plan` | `3703d2d`      |
 
 신규 개발 코드는 `iwtc-backend-nest`에 작성한다. `iwtc-backend-new`를 신규 서버로 배포하지 않는다.
 
-게임 결과·랭킹·미디어·회원·비회원 댓글·회원 인증·회원 댓글 삭제 구현과 프론트엔드의 게임 완료·댓글 작성·삭제·로그인 화면 수정은 각 원격 기준 브랜치에 push되어 있다. `iwtc.code-workspace`는 신규 백엔드 작업 트리에만 있는 로컬 편의 파일이며 커밋하지 않았다.
+게임 결과·랭킹·미디어·회원·비회원 댓글·회원 인증·회원 댓글 삭제·내 월드컵 목록·상세·생성 구현과 프론트엔드의 게임 완료·댓글 작성·삭제·로그인 화면 수정은 각 원격 기준 브랜치에 push되어 있다. `iwtc.code-workspace`는 신규 백엔드 작업 트리에만 있는 로컬 편의 파일이며 커밋하지 않았다.
 
 ## 3. 새 환경에 내려받기
 
@@ -141,6 +141,8 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 - 토큰이 없을 때만 비회원 작성을 허용하는 선택적 댓글 인증
 - 작성 회원 본인만 가능한 댓글 소프트 삭제와 동시 중복 삭제 방지
 - 댓글 본문·닉네임 검증과 공개 후보 소속 확인
+- 로그인 회원의 월드컵 목록·상세 조회와 생성
+- 월드컵 생성 시 소유자 연결과 다른 회원 월드컵 접근 차단
 - 새 PostgreSQL 회원가입과 Argon2id 비밀번호 해시
 - 로그인, 내 회원 정보 조회, 세션 단위 로그아웃
 - HttpOnly refresh token 쿠키와 일회성 rotation
@@ -160,12 +162,15 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 | GET    | `/api/media-files/{mediaFileId}`                              | 완료 |
 | GET    | `/api/world-cups/{worldCupId}/comments`                       | 완료 |
 | POST   | `/api/world-cups/{worldCupId}/contents/{contentsId}/comments` | 완료 |
-| DELETE | `/api/comments/{commentId}`                                  | 완료 |
+| DELETE | `/api/comments/{commentId}`                                   | 완료 |
 | POST   | `/api/members/sign-up`                                        | 완료 |
 | POST   | `/api/members/sign-in`                                        | 완료 |
 | GET    | `/api/members/me/summary`                                     | 완료 |
 | POST   | `/api/new-access-token`                                       | 완료 |
 | POST   | `/api/members/sign-out`                                       | 완료 |
+| GET    | `/api/me/game-manage/world-cups`                              | 완료 |
+| GET    | `/api/me/game-manage/world-cups/{worldCupId}`                 | 완료 |
+| POST   | `/api/me/game-manage/world-cups`                              | 완료 |
 
 개발용 seed는 공개 월드컵 1개와 `후보 A`부터 `후보 D`까지 총 4개 후보를 만든다. 후보 ID는 실행 환경에 따라 달라질 수 있으므로 코드에서 특정 ID를 전제로 사용하지 않는다.
 
@@ -173,9 +178,11 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 
 미디어는 PostgreSQL에 메타데이터와 object key만 저장한다. 정적 파일 응답은 `MEDIA_PUBLIC_BASE_URL` 기반의 공개 URL이며 `size=divide2`에 썸네일 key가 없으면 원본 URL로 대체한다. 현재 Compose에는 실제 S3 호환 오브젝트 스토리지가 포함되어 있지 않으므로 운영·로컬 저장소 공급자는 별도로 구성해야 한다.
 
-댓글은 회원과 비회원 모두 작성할 수 있다. 비회원은 닉네임이 필수이며 `memberId`를 `null`로 저장한다. 회원은 프론트가 전달한 `access-token`으로 확인한 서버의 `memberId`와 닉네임을 저장하므로 요청 닉네임을 생략할 수 있고, 요청에 닉네임이 있어도 신뢰하지 않는다. 토큰 헤더가 없을 때만 비회원으로 처리하며 유효하지 않은 토큰을 보내면 HTTP 401을 반환한다. 본문은 공백 제거 후 1~30자, 비회원 닉네임은 1~50자로 검증한다. 작성 대상 후보가 공개 상태이며 요청 월드컵에 속하는지 확인한다. 목록은 `createdAt DESC, id DESC`로 안정적으로 정렬하며 `offset`은 건너뛸 행 수, `limit`은 조회 수다. 기본 `limit`은 20이고 최대 100이다. 회원 댓글 삭제는 작성 회원 본인만 가능하며 행을 제거하지 않고 `deletedAt`을 기록한다. 미인증 요청은 HTTP 401, 다른 회원 또는 비회원 댓글 삭제 요청은 HTTP 403, 없거나 이미 삭제된 댓글은 HTTP 404를 반환한다. 목록에서는 삭제된 댓글을 제외한다. 운영 공개 전 rate limit과 스팸 방지 정책이 필요하다.
+댓글은 회원과 비회원 모두 작성할 수 있다. 비회원은 닉네임이 필수이며 `memberId`를 `null`로 저장한다. 회원은 프론트가 전달한 `access-token`으로 확인한 서버의 `memberId`와 닉네임을 저장하므로 요청 닉네임을 생략할 수 있고, 요청에 닉네임이 있어도 신뢰하지 않는다. 토큰 헤더가 없을 때만 비회원으로 처리하며 유효하지 않은 토큰을 보내면 HTTP 401을 반환한다. 본문은 공백 제거 후 1–30자, 비회원 닉네임은 1–50자로 검증한다. 작성 대상 후보가 공개 상태이며 요청 월드컵에 속하는지 확인한다. 목록은 `createdAt DESC, id DESC`로 안정적으로 정렬하며 `offset`은 건너뛸 행 수, `limit`은 조회 수다. 기본 `limit`은 20이고 최대 100이다. 회원 댓글 삭제는 작성 회원 본인만 가능하며 행을 제거하지 않고 `deletedAt`을 기록한다. 미인증 요청은 HTTP 401, 다른 회원 또는 비회원 댓글 삭제 요청은 HTTP 403, 없거나 이미 삭제된 댓글은 HTTP 404를 반환한다. 목록에서는 삭제된 댓글을 제외한다. 운영 공개 전 rate limit과 스팸 방지 정책이 필요하다.
 
-회원은 기존 데이터를 이관하지 않고 새로 가입한다. `serviceId`는 영문·숫자 6~10자로 받고 소문자로 정규화하며, 닉네임은 공백 없는 2~10자다. 비밀번호는 8~16자의 영문·숫자·특수문자 조합이고 Argon2id 해시만 DB에 저장한다. access token은 15분이며 프론트 호환을 위해 `access-token` 헤더를 사용한다. refresh token은 30일짜리 HttpOnly 쿠키이고 DB에는 SHA-256 해시만 저장한다. 갱신 때마다 토큰과 세션을 교체하며 이전 토큰 재사용 시 같은 family의 세션을 모두 폐기한다. 로그아웃은 POST이며 refresh cookie 삭제와 서버 세션 폐기를 함께 수행한다.
+회원은 기존 데이터를 이관하지 않고 새로 가입한다. `serviceId`는 영문·숫자 6–10자로 받고 소문자로 정규화하며, 닉네임은 공백 없는 2–10자다. 비밀번호는 8–16자의 영문·숫자·특수문자 조합이고 Argon2id 해시만 DB에 저장한다. access token은 15분이며 프론트 호환을 위해 `access-token` 헤더를 사용한다. refresh token은 30일짜리 HttpOnly 쿠키이고 DB에는 SHA-256 해시만 저장한다. 갱신 때마다 토큰과 세션을 교체하며 이전 토큰 재사용 시 같은 family의 세션을 모두 폐기한다. 로그아웃은 POST이며 refresh cookie 삭제와 서버 세션 폐기를 함께 수행한다.
+
+월드컵 관리 목록과 상세, 생성 API는 로그인이 필수다. 생성 시 현재 회원의 ID를 `WorldCup.ownerId`에 저장하고, 목록과 상세 조회는 같은 `ownerId`만 조회한다. 다른 회원 소유이거나 존재하지 않는 월드컵 상세는 모두 HTTP 404를 반환해 존재 여부를 노출하지 않는다. 제목은 공백 제거 후 1~100자, 설명은 선택값으로 최대 100자, 공개 여부는 `PUBLIC` 또는 `PRIVATE`만 허용한다. 기존 스키마에 `ownerId`가 이미 있으므로 이 단계에서 새 migration은 만들지 않았다.
 
 ## 8. 현재 확인된 사용자 흐름
 
@@ -202,6 +209,8 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 
 게임 결과·미디어·댓글·회원 인증 migration을 실제 로컬 PostgreSQL에 적용했다. 게임 완료 저장, 누적 랭킹 갱신, 댓글 작성과 목록 재조회, 회원가입부터 로그아웃까지 이어지는 브라우저 흐름을 확인했다. 로그인 회원이 닉네임 없이 댓글을 작성해도 서버 회원 ID와 닉네임으로 연결되는 흐름과 본인 댓글 삭제 후 목록에서 사라지는 흐름도 실제 API와 PostgreSQL로 확인했다. 비밀번호는 Argon2id, refresh token은 64자리 SHA-256 해시로만 DB에 저장되는 것도 확인했다. 검증용 회원·세션·댓글·게임 결과는 확인 후 삭제했다. 미디어 조회는 자동화 테스트로 검증했으며 실제 오브젝트 스토리지는 아직 연결하지 않았다.
 
+월드컵 관리 API는 실제 로컬 PostgreSQL에서 회원가입, 로그인, 비공개 월드컵 생성, 내 목록과 상세 조회까지 확인했다. 다른 검증 회원으로 같은 월드컵 상세를 요청했을 때 HTTP 404가 반환되는 것도 확인했다. 이 과정에서 만든 검증용 회원·세션·월드컵은 확인 후 모두 삭제했다.
+
 ## 9. 검증 명령
 
 백엔드:
@@ -213,7 +222,7 @@ npm run test:e2e
 npm run build
 ```
 
-마지막 작업 기준으로 Prisma 검증, 린트, 빌드, 단위 테스트 55개, API 통합 테스트 34개가 모두 통과했다.
+마지막 작업 기준으로 Prisma 검증, 린트, 빌드, 단위 테스트 59개, API 통합 테스트 39개가 모두 통과했다.
 
 프론트엔드:
 
@@ -236,11 +245,11 @@ npm test
 
 ## 11. 다음 작업
 
-회원 댓글 삭제 API와 프론트엔드 UI까지 완료되었다. 가장 자연스러운 다음 작업은 월드컵·후보 관리 API를 NestJS로 이전하고 로그인 회원 소유권을 연결하는 것이다. 기존 Spring 구현과 프론트엔드 `ManageWorldCupService`의 실제 요청 경로·형식을 먼저 비교한 뒤 작은 기능 단위로 진행한다.
+내 월드컵 목록·상세·생성과 소유자 연결까지 완료되었다. 가장 자연스러운 다음 작업은 관리용 후보 목록 조회 API를 먼저 구현하는 것이다. 월드컵 소유권을 확인한 뒤 후보 ID와 미디어 메타데이터를 프론트엔드 `ManageWorldCupService` 계약에 맞게 반환한다. 그다음 후보 생성·수정·삭제를 나누어 구현하며, 실제 파일 업로드는 오브젝트 스토리지 정책을 정한 뒤 연결한다.
 
 그다음 우선순위는 다음과 같다.
 
-1. 월드컵·후보 관리 API와 소유자 권한 연결
+1. 관리용 후보 목록과 후보 생성·수정·삭제
 2. 실제 S3 호환 오브젝트 스토리지와 미디어 업로드
 3. GitHub Actions, GHCR, Kubernetes, Argo CD 배포
 4. PostgreSQL 백업과 복구 테스트
@@ -249,4 +258,4 @@ npm test
 
 새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
 
-> `iwtc-backend-nest/HANDOFF.md`와 기존 참고 저장소의 `API_CONTRACT.md`를 먼저 읽어줘. 기존 DB, 회원 데이터와 비밀번호는 사용하지 않고 PostgreSQL 새 데이터 기준으로 진행한다. 현재 완료된 인증·회원 댓글 삭제 구현을 확인한 뒤, 기존 Spring 코드와 `iwtc-frontend-new`의 `ManageWorldCupService` 요청 형식을 기준으로 월드컵·후보 관리 API와 로그인 회원 소유자 권한 연결부터 구현해줘.
+> `iwtc-backend-nest/HANDOFF.md`와 기존 참고 저장소의 `API_CONTRACT.md`를 먼저 읽어줘. 기존 DB, 회원 데이터와 비밀번호는 사용하지 않고 PostgreSQL 새 데이터 기준으로 진행한다. 현재 완료된 내 월드컵 목록·상세·생성과 소유자 권한 구현을 확인한 뒤, `iwtc-frontend-new`의 `ManageWorldCupService` 요청 형식에 맞는 관리용 후보 목록 조회부터 구현해줘. 모든 후보 관리 요청에서 월드컵 소유권을 확인하고, 실제 파일 업로드는 오브젝트 스토리지 정책을 확정하기 전까지 분리해줘.
