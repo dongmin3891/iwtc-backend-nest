@@ -1,10 +1,59 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import type { CreateWorldCupContentDto } from './dto/create-world-cup-contents.dto.js';
 import type { ManagedWorldCupContent } from './manage-world-cup-contents.types.js';
 
 @Injectable()
 export class ManageWorldCupContentsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async createOne(
+    memberId: number,
+    worldCupId: number,
+    request: CreateWorldCupContentDto,
+  ): Promise<number> {
+    return this.prisma.$transaction(async (transaction) => {
+      const ownedWorldCup = await transaction.worldCup.findFirst({
+        where: { id: worldCupId, ownerId: memberId },
+        select: { id: true },
+      });
+      if (!ownedWorldCup) {
+        throw new NotFoundException('월드컵을 찾을 수 없습니다.');
+      }
+
+      const lastCandidate = await transaction.candidate.findFirst({
+        where: { worldCupId },
+        orderBy: [{ sortOrder: 'desc' }, { id: 'desc' }],
+        select: { sortOrder: true },
+      });
+      const media = request.createMediaFileRequest;
+      const mediaFile = await transaction.mediaFile.create({
+        data: {
+          fileType: media.fileType,
+          detailType: media.detailFileType,
+          objectKey: null,
+          thumbnailObjectKey: null,
+          externalUrl: media.mediaData,
+          originalName: null,
+          videoStartTime: media.videoStartTime,
+          videoPlayDuration: media.videoPlayDuration,
+        },
+        select: { id: true },
+      });
+      const candidate = await transaction.candidate.create({
+        data: {
+          worldCupId,
+          name: request.contentsName,
+          mediaFileId: mediaFile.id,
+          visibleType: request.visibleType,
+          sortOrder: (lastCandidate?.sortOrder ?? -1) + 1,
+        },
+        select: { id: true },
+      });
+
+      return candidate.id;
+    });
+  }
 
   async findAll(
     memberId: number,
