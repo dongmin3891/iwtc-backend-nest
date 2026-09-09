@@ -682,7 +682,7 @@ describe('IWTC API (e2e)', () => {
   it('GET /api/media-files/10 returns the requested thumbnail URL', async () => {
     await request(app.getHttpServer())
       .get('/api/media-files/10?size=divide2')
-      .expect('Cache-Control', 'public, max-age=600')
+      .expect('Cache-Control', 'public, no-cache')
       .expect(200)
       .expect({
         code: 1,

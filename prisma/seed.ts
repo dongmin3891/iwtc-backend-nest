@@ -52,6 +52,14 @@ async function main(): Promise<void> {
     ],
     skipDuplicates: true,
   });
+
+  await prisma.$queryRaw`
+    SELECT setval(
+      pg_get_serial_sequence('world_cups', 'id'),
+      GREATEST((SELECT COALESCE(MAX(id), 1) FROM world_cups), 1),
+      true
+    )
+  `;
 }
 
 try {

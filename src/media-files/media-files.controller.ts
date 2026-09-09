@@ -23,7 +23,7 @@ export class MediaFilesController {
   constructor(private readonly mediaFilesService: MediaFilesService) {}
 
   @Get(':mediaFileId')
-  @Header('Cache-Control', 'public, max-age=600')
+  @Header('Cache-Control', 'public, no-cache')
   @ApiOperation({ summary: '미디어 파일 조회' })
   @ApiOkResponse({ description: '미디어 파일 조회' })
   @ApiNotFoundResponse({ description: '미디어 파일을 찾을 수 없음' })
