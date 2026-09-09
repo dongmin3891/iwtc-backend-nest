@@ -67,6 +67,9 @@ openssl rand -base64 48
 | GET    | `/api/me/game-manage/world-cups`              | 내 월드컵 목록 |
 | GET    | `/api/me/game-manage/world-cups/{worldCupId}` | 내 월드컵 상세 |
 | POST   | `/api/me/game-manage/world-cups`              | 내 월드컵 생성 |
+| GET    | `/api/me/game-contents-manage/world-cups/{worldCupId}/manage-contents` | 관리용 후보 목록 |
+
+관리용 후보 목록은 `GET /api/me/game-contents-manage/world-cups/{worldCupId}/manage-contents`로 조회합니다. 월드컵 소유자만 접근할 수 있고 공개·비공개 후보를 모두 관리 순서대로 반환합니다. 후보별 누적 게임 점수와 공동순위도 함께 계산하며, 미디어가 아직 없는 후보는 `mediaFileId`가 `null`입니다.
 
 ## 회원 인증
 

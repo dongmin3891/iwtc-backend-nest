@@ -6,6 +6,8 @@ import type { App } from 'supertest/types';
 import { AccessTokenGuard } from '../src/auth/access-token.guard.js';
 import { AuthService } from '../src/auth/auth.service.js';
 import { configureApp } from '../src/configure-app.js';
+import { ManageWorldCupContentsController } from '../src/manage-world-cups/manage-world-cup-contents.controller.js';
+import { ManageWorldCupContentsService } from '../src/manage-world-cups/manage-world-cup-contents.service.js';
 import { ManageWorldCupsController } from '../src/manage-world-cups/manage-world-cups.controller.js';
 import { ManageWorldCupsService } from '../src/manage-world-cups/manage-world-cups.service.js';
 
@@ -37,19 +39,38 @@ describe('Manage world cups API (e2e)', () => {
       nickname: '동민',
     }),
   };
+  const manageWorldCupContentsService = {
+    findAll: vi.fn().mockResolvedValue([
+      {
+        contentsId: 31,
+        contentsName: '후보 A',
+        mediaFileId: 41,
+        visibleType: 'PUBLIC',
+        gameRank: 1,
+        gameScore: 100,
+      },
+    ]),
+  };
 
   beforeAll(async () => {
     const config = new ConfigService({
       CORS_ORIGINS: ['http://localhost:3000'],
     });
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      controllers: [ManageWorldCupsController],
+      controllers: [
+        ManageWorldCupsController,
+        ManageWorldCupContentsController,
+      ],
       providers: [
         AccessTokenGuard,
         { provide: AuthService, useValue: authService },
         {
           provide: ManageWorldCupsService,
           useValue: manageWorldCupsService,
+        },
+        {
+          provide: ManageWorldCupContentsService,
+          useValue: manageWorldCupContentsService,
         },
         { provide: ConfigService, useValue: config },
       ],
@@ -135,6 +156,37 @@ describe('Manage world cups API (e2e)', () => {
       .expect(400);
 
     expect(manageWorldCupsService.create).not.toHaveBeenCalled();
+  });
+
+  it('returns management contents for an owned world cup', async () => {
+    await request(app.getHttpServer())
+      .get('/api/me/game-contents-manage/world-cups/3/manage-contents')
+      .set('access-token', 'valid-token')
+      .expect(200)
+      .expect({
+        code: 1,
+        message: '자신의 게임 컨텐츠 리스트 조회',
+        data: [
+          {
+            contentsId: 31,
+            contentsName: '후보 A',
+            mediaFileId: 41,
+            visibleType: 'PUBLIC',
+            gameRank: 1,
+            gameScore: 100,
+          },
+        ],
+      });
+
+    expect(manageWorldCupContentsService.findAll).toHaveBeenCalledWith(7, 3);
+  });
+
+  it('requires authentication for management contents', async () => {
+    await request(app.getHttpServer())
+      .get('/api/me/game-contents-manage/world-cups/3/manage-contents')
+      .expect(401);
+
+    expect(manageWorldCupContentsService.findAll).not.toHaveBeenCalled();
   });
 
   afterAll(async () => {
