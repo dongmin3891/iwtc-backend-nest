@@ -18,7 +18,7 @@
 | 용도               | 저장소                                                 | 기준 브랜치                 | 기능 기준 커밋 |
 | ------------------ | ------------------------------------------------------ | --------------------------- | -------------- |
 | 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `4317c81`      |
-| 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `0240737`      |
+| 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `11f71c8`      |
 | 기존 Spring 참고용 | `https://github.com/dongmin3891/iwtc-backend-new.git`  | `codex/nest-migration-plan` | `3703d2d`      |
 
 신규 개발 코드는 `iwtc-backend-nest`에 작성한다. `iwtc-backend-new`를 신규 서버로 배포하지 않는다.
@@ -238,6 +238,8 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 
 프론트 후보 생성 폼의 YouTube 전용 표시도 실제 브라우저에서 확인했다. 이미지 파일 버튼은 표시되지 않았고 YouTube 영상만 등록할 수 있다는 안내와 `유튜브 영상` 버튼이 표시되었다. 버튼을 누르면 후보명, YouTube 동영상 링크, 영상 시작 시간, 반복 시간 입력란이 기존처럼 열렸다. 실제 후보는 저장하지 않았다. 화면 확인을 위해 만든 임시 회원과 빈 월드컵은 삭제했으며 두 데이터가 모두 0개 남은 것을 확인했다. 이 과정에서 `SelectVisibleType`의 라디오 입력에 `checked`와 `defaultChecked`가 함께 지정되었다는 기존 React 경고를 발견했다.
 
+`SelectVisibleType`의 공개 라디오는 이미 `visibleType` 상태의 `checked` 값으로 제어되고 있으므로 중복된 `defaultChecked`를 제거했다. 공개·비공개 선택 방식과 후보 폼의 표시 내용은 변경하지 않았다. 테스트 59개, 타입 검사, 린트와 프로덕션 빌드가 통과했으며 실제 브라우저에서 React 경고가 사라졌는지는 다음 단계에서 확인한다.
+
 ## 9. 검증 명령
 
 백엔드:
@@ -272,7 +274,7 @@ npm test
 
 ## 11. 다음 작업
 
-프론트 후보 생성 폼의 YouTube 전용 표시와 브라우저 확인까지 완료되었다. 다음 작업은 `SelectVisibleType.tsx`의 라디오 입력에서 `checked`와 `defaultChecked` 중복을 제거해 controlled input으로 통일하는 수정만 진행한다. 후보 폼의 기존 동작과 표시 내용은 바꾸지 않는다. 수정 후 관련 테스트와 타입 검사, 린트, 빌드를 실행하고 브라우저 재확인은 별도 다음 단계로 남긴다.
+`SelectVisibleType.tsx`의 라디오 입력을 controlled input으로 통일하는 수정과 정적 검증까지 완료되었다. 다음 작업은 브라우저에서 후보 생성 폼을 열고 공개·비공개 선택이 기존처럼 전환되는지와 `checked`·`defaultChecked` 관련 React 경고가 더 이상 발생하지 않는지만 확인한다. 이 단계에서는 실제 후보를 저장하거나 백엔드·프론트 코드를 수정하지 않는다.
 
 후보 삭제는 게임 결과가 후보를 `NoAction` 외래 키로 참조하므로 현재 상태에서 단순 hard delete가 실패한다. 삭제 API 구현 전 후보 soft delete 필드 추가 또는 과거 게임 결과 처리 정책을 먼저 결정해야 한다. 월드컵 삭제도 같은 이유로 게임 결과를 먼저 처리하지 않으면 실패하므로 별도 단계로 둔다.
 
@@ -287,4 +289,4 @@ npm test
 
 새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
 
-> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 이어서 진행해줘. 기존 DB나 회원 데이터는 사용하지 않는다. 다음 단계에서는 프론트의 `SelectVisibleType.tsx` 라디오 입력에서 `checked`와 `defaultChecked` 중복만 제거해 controlled input으로 통일하고, 후보 폼의 기존 동작은 바꾸지 마. 관련 테스트와 타입 검사, 린트, 빌드까지만 실행하고 브라우저 재확인은 다음 단계로 남겨줘.
+> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 이어서 진행해줘. 기존 DB나 회원 데이터는 사용하지 않는다. 다음 단계에서는 코드를 수정하지 말고 브라우저에서 후보 생성 폼의 공개·비공개 선택이 정상적으로 전환되는지와 `SelectVisibleType`의 `checked`·`defaultChecked` 관련 React 경고가 사라졌는지만 확인해줘. 실제 후보 저장은 하지 말고 검증용 데이터를 만들었다면 확인 후 모두 삭제해줘.
