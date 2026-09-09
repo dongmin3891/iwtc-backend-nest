@@ -17,7 +17,7 @@
 
 | 용도               | 저장소                                                 | 기준 브랜치                 | 기능 기준 커밋 |
 | ------------------ | ------------------------------------------------------ | --------------------------- | -------------- |
-| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `f3737d3`      |
+| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `fdd87ec`      |
 | 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `64c2327`      |
 | 기존 Spring 참고용 | `https://github.com/dongmin3891/iwtc-backend-new.git`  | `codex/nest-migration-plan` | `3703d2d`      |
 
@@ -147,6 +147,7 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 - 유튜브 후보 일괄 생성 요청 DTO와 입력 검증
 - 소유자 전용 유튜브 후보 일괄 내부 저장 서비스
 - 같은 월드컵 후보 생성의 `sortOrder` 동시성 충돌 방지
+- 소유자 전용 후보 일괄 생성 POST 컨트롤러
 - 새 PostgreSQL 회원가입과 Argon2id 비밀번호 해시
 - 로그인, 내 회원 정보 조회, 세션 단위 로그아웃
 - HttpOnly refresh token 쿠키와 일회성 rotation
@@ -176,6 +177,7 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 | GET    | `/api/me/game-manage/world-cups/{worldCupId}`                 | 완료 |
 | POST   | `/api/me/game-manage/world-cups`                              | 완료 |
 | GET    | `/api/me/game-contents-manage/world-cups/{worldCupId}/manage-contents` | 완료 |
+| POST   | `/api/me/game-contents-manage/world-cups/{worldCupId}/contents` | 구현, 통합 검증 예정 |
 
 개발용 seed는 공개 월드컵 1개와 `후보 A`부터 `후보 D`까지 총 4개 후보를 만든다. 후보 ID는 실행 환경에 따라 달라질 수 있으므로 코드에서 특정 ID를 전제로 사용하지 않는다.
 
@@ -193,7 +195,9 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 
 후보 생성 요청 규칙은 DTO와 단위 테스트로 작성되어 있다. 한 요청에는 1–256개 후보를 허용하며 후보명은 공백 제거 후 1–100자, 공개 여부는 `PUBLIC` 또는 `PRIVATE`다. 현재는 HTTPS `youtube.com/watch?v=` 주소, 5자리 시작 시간, 3–5초 재생 시간, `INTERNET_VIDEO_URL`과 `YOU_TUBE_URL` 조합만 허용한다. 정적 파일 요청과 알 수 없는 필드는 거부한다. 기존 프론트가 보내는 `originalName`은 호환을 위해 받지만 유튜브 미디어 저장에는 사용하지 않는다.
 
-유튜브 후보 배열을 저장하는 내부 서비스도 구현되어 있다. 로그인 회원의 월드컵 소유권을 먼저 확인하고 요청에 포함된 모든 `MediaFile`과 `Candidate`를 하나의 트랜잭션에서 순서대로 생성한다. 후보 순서는 기존 마지막 `sortOrder` 다음 값부터 요청 배열 순서대로 연속해서 부여하며, 후보가 없으면 0부터 시작한다. 중간 저장이 실패하면 트랜잭션 전체가 실패하므로 해당 요청에서 생성하던 데이터가 함께 롤백된다. 같은 월드컵의 동시 요청은 PostgreSQL 트랜잭션 범위 advisory lock으로 직렬화한 뒤 마지막 순번을 조회하므로 `sortOrder` 고유 제약 충돌을 막는다. 서로 다른 월드컵은 서로 다른 잠금 키를 사용한다. 아직 컨트롤러와 연결하지 않았으므로 외부에서 호출할 수 있는 후보 생성 API는 없다.
+유튜브 후보 배열을 저장하는 내부 서비스도 구현되어 있다. 로그인 회원의 월드컵 소유권을 먼저 확인하고 요청에 포함된 모든 `MediaFile`과 `Candidate`를 하나의 트랜잭션에서 순서대로 생성한다. 후보 순서는 기존 마지막 `sortOrder` 다음 값부터 요청 배열 순서대로 연속해서 부여하며, 후보가 없으면 0부터 시작한다. 중간 저장이 실패하면 트랜잭션 전체가 실패하므로 해당 요청에서 생성하던 데이터가 함께 롤백된다. 같은 월드컵의 동시 요청은 PostgreSQL 트랜잭션 범위 advisory lock으로 직렬화한 뒤 마지막 순번을 조회하므로 `sortOrder` 고유 제약 충돌을 막는다. 서로 다른 월드컵은 서로 다른 잠금 키를 사용한다.
+
+후보 일괄 생성 POST 컨트롤러는 기존 인증 가드에서 로그인 회원 ID를 받고, 검증된 요청 DTO의 `data` 배열을 내부 일괄 저장 서비스에 전달한다. 기존 프론트 호환을 위해 성공 시 HTTP 201과 `게임 생성`, `data: null` 응답을 사용한다. 컨트롤러 단위 테스트는 완료했지만 인증·전역 입력 검증·소유권 차단을 포함한 API 통합 테스트는 아직 진행하지 않았다.
 
 ## 8. 현재 확인된 사용자 흐름
 
@@ -237,7 +241,7 @@ npm run test:e2e
 npm run build
 ```
 
-마지막 작업 기준으로 린트, 빌드, 단위 테스트 82개가 통과했다. API 통합 테스트는 직전 API 작업 기준 41개가 통과했으며, 이번 내부 서비스 작업에서는 다시 실행하지 않았다.
+마지막 작업 기준으로 린트, 빌드, 단위 테스트 84개가 통과했다. API 통합 테스트는 직전 API 작업 기준 41개가 통과했으며, 이번 POST 컨트롤러 작업에서는 다시 실행하지 않았다.
 
 프론트엔드:
 
@@ -260,7 +264,7 @@ npm test
 
 ## 11. 다음 작업
 
-후보 일괄 저장과 동일 월드컵 동시 요청의 실제 PostgreSQL 검증까지 완료되었다. 다음 작업은 기존 생성 DTO의 `data` 배열을 내부 일괄 저장 서비스에 전달하는 소유자 전용 POST 컨트롤러 메서드와 컨트롤러 단위 테스트만 구현한다. 로그인 회원 ID는 현재 인증 가드에서 받고, 공통 성공 응답 형식과 Swagger 문서를 적용한다. 이 단계에서는 API 통합 테스트, 프론트 연결과 브라우저 검증은 진행하지 않는다.
+후보 일괄 생성 POST 컨트롤러와 단위 테스트까지 완료되었다. 다음 작업은 이 POST 경로의 API 통합 테스트만 추가한다. 유효한 로그인 요청의 HTTP 201과 저장 호출, 토큰이 없는 요청의 HTTP 401, 잘못된 후보 요청의 HTTP 400, 다른 회원 월드컵 요청의 HTTP 404를 확인한다. 이 단계에서는 프론트 연결, 브라우저 검증과 실제 PostgreSQL 데이터 생성은 진행하지 않는다.
 
 후보 삭제는 게임 결과가 후보를 `NoAction` 외래 키로 참조하므로 현재 상태에서 단순 hard delete가 실패한다. 삭제 API 구현 전 후보 soft delete 필드 추가 또는 과거 게임 결과 처리 정책을 먼저 결정해야 한다. 월드컵 삭제도 같은 이유로 게임 결과를 먼저 처리하지 않으면 실패하므로 별도 단계로 둔다.
 
@@ -275,4 +279,4 @@ npm test
 
 새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
 
-> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 후보 생성 DTO, 관리 후보 컨트롤러와 일괄 저장 서비스를 확인해줘. 기존 DB나 회원 데이터는 사용하지 않는다. 다음 단계에서는 프론트와 실제 DB를 건드리지 말고, 기존 생성 DTO의 `data` 배열을 내부 일괄 저장 서비스에 전달하는 소유자 전용 POST 컨트롤러 메서드와 컨트롤러 단위 테스트만 구현해줘. 공통 성공 응답과 Swagger 문서를 기존 패턴에 맞추고 API 통합 테스트는 다음 단계로 남겨줘.
+> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 후보 일괄 생성 POST 컨트롤러, DTO와 API 통합 테스트 구성을 확인해줘. 기존 DB나 회원 데이터는 사용하지 않는다. 다음 단계에서는 프론트와 실제 PostgreSQL을 건드리지 말고, POST 후보 일괄 생성 경로에 유효한 로그인 요청 201, 미인증 401, 잘못된 입력 400, 다른 회원 월드컵 404를 확인하는 API 통합 테스트만 추가해줘. 브라우저 검증은 다음 단계로 남겨줘.
