@@ -17,7 +17,7 @@
 
 | 용도               | 저장소                                                 | 기준 브랜치                 | 기능 기준 커밋 |
 | ------------------ | ------------------------------------------------------ | --------------------------- | -------------- |
-| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `6a66218`      |
+| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `409eb9f`      |
 | 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `64c2327`      |
 | 기존 Spring 참고용 | `https://github.com/dongmin3891/iwtc-backend-new.git`  | `codex/nest-migration-plan` | `3703d2d`      |
 
@@ -144,6 +144,7 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 - 로그인 회원의 월드컵 목록·상세 조회와 생성
 - 월드컵 생성 시 소유자 연결과 다른 회원 월드컵 접근 차단
 - 소유자 전용 관리 후보 목록과 누적 점수·공동순위 조회
+- 유튜브 후보 일괄 생성 요청 DTO와 입력 검증
 - 새 PostgreSQL 회원가입과 Argon2id 비밀번호 해시
 - 로그인, 내 회원 정보 조회, 세션 단위 로그아웃
 - HttpOnly refresh token 쿠키와 일회성 rotation
@@ -188,6 +189,8 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 
 관리용 후보 목록은 월드컵 소유권을 먼저 확인한 뒤 공개·비공개 후보를 모두 `sortOrder`, 후보 ID 순서로 반환한다. 후보 ID 필드는 기존 Spring의 잘못된 `worldCupId` 이름을 유지하지 않고 `contentsId`로 바로잡았으며 프론트 매핑도 함께 수정했다. 후보별 게임 결과 점수를 합산하고 동점에는 같은 순위를 부여한다. 미디어가 없는 후보는 `mediaFileId: null`이며 프론트는 미디어 조회를 건너뛴다. 실제 미디어 내용은 기존 `/api/media-files/{mediaFileId}` API로 조회한다.
 
+후보 생성 요청 규칙은 DTO와 단위 테스트까지만 작성되어 있고 아직 API나 DB 저장 서비스에는 연결하지 않았다. 한 요청에는 1–256개 후보를 허용하며 후보명은 공백 제거 후 1–100자, 공개 여부는 `PUBLIC` 또는 `PRIVATE`다. 현재는 HTTPS `youtube.com/watch?v=` 주소, 5자리 시작 시간, 3–5초 재생 시간, `INTERNET_VIDEO_URL`과 `YOU_TUBE_URL` 조합만 허용한다. 정적 파일 요청과 알 수 없는 필드는 거부한다. 기존 프론트가 보내는 `originalName`은 호환을 위해 받지만 유튜브 미디어 저장에는 사용하지 않는다.
+
 ## 8. 현재 확인된 사용자 흐름
 
 다음 흐름을 실제 브라우저에서 확인했다.
@@ -228,7 +231,7 @@ npm run test:e2e
 npm run build
 ```
 
-마지막 작업 기준으로 Prisma 검증, 린트, 빌드, 단위 테스트 62개, API 통합 테스트 41개가 모두 통과했다.
+마지막 작업 기준으로 Prisma 검증, 린트, 빌드, 단위 테스트 77개, API 통합 테스트 41개가 모두 통과했다.
 
 프론트엔드:
 
@@ -251,7 +254,7 @@ npm test
 
 ## 11. 다음 작업
 
-관리용 후보 목록까지 완료되었다. 가장 자연스러운 다음 작업은 후보 일괄 생성 API다. 먼저 현재 저장 구조로 완결할 수 있는 유튜브 URL 후보를 구현하고, 정적 이미지·동영상 파일은 base64를 DB에 저장하지 말고 오브젝트 스토리지 업로드 정책을 확정한 뒤 연결한다. 모든 요청에서 월드컵 소유권을 확인하고, 후보 `sortOrder`는 같은 월드컵 안에서 충돌하지 않도록 트랜잭션으로 배정한다.
+후보 생성 요청 규칙과 검증까지 완료되었다. 다음 작업은 API나 일괄 처리를 붙이지 않고 유튜브 후보 1개를 저장하는 내부 서비스만 구현한다. 로그인 회원의 월드컵 소유권을 확인하고 `MediaFile`과 `Candidate`를 하나의 트랜잭션에서 생성하며, 현재 후보의 마지막 `sortOrder` 다음 값을 배정한다. 이 단계에서는 컨트롤러, 프론트 연결, 정적 파일 저장을 진행하지 않는다.
 
 후보 삭제는 게임 결과가 후보를 `NoAction` 외래 키로 참조하므로 현재 상태에서 단순 hard delete가 실패한다. 삭제 API 구현 전 후보 soft delete 필드 추가 또는 과거 게임 결과 처리 정책을 먼저 결정해야 한다. 월드컵 삭제도 같은 이유로 게임 결과를 먼저 처리하지 않으면 실패하므로 별도 단계로 둔다.
 
@@ -266,4 +269,4 @@ npm test
 
 새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
 
-> `iwtc-backend-nest/HANDOFF.md`와 기존 참고 저장소의 `API_CONTRACT.md`를 먼저 읽어줘. 기존 DB, 회원 데이터와 비밀번호는 사용하지 않고 PostgreSQL 새 데이터 기준으로 진행한다. 현재 완료된 관리용 후보 목록과 프론트의 `contentsId` 매핑을 확인한 뒤, `ManageWorldCupService` 요청 형식에 맞는 후보 일괄 생성 API를 구현해줘. 먼저 유튜브 URL 후보를 지원하고, 정적 파일은 base64를 DB에 저장하지 말고 오브젝트 스토리지 업로드 정책과 분리해줘. 모든 요청에서 월드컵 소유권과 `sortOrder` 충돌을 검증해줘.
+> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 후보 생성 요청 DTO와 테스트를 확인해줘. 기존 DB나 회원 데이터는 사용하지 않는다. 다음 단계에서는 API와 프론트를 건드리지 말고, 소유권 확인 후 유튜브 `MediaFile`과 `Candidate` 하나를 트랜잭션으로 저장하는 내부 서비스와 단위 테스트만 구현해줘. 같은 월드컵의 다음 `sortOrder`를 안전하게 배정하되 일괄 생성과 동시 요청 처리는 다음 단계로 남겨줘.
