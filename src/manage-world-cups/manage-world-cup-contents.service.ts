@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { CreateWorldCupContentDto } from './dto/create-world-cup-contents.dto.js';
 import type { ManagedWorldCupContent } from './manage-world-cup-contents.types.js';
@@ -12,6 +13,16 @@ export class ManageWorldCupContentsService {
     worldCupId: number,
     request: CreateWorldCupContentDto,
   ): Promise<number> {
+    const candidateIds = await this.createMany(memberId, worldCupId, [request]);
+
+    return candidateIds[0]!;
+  }
+
+  async createMany(
+    memberId: number,
+    worldCupId: number,
+    requests: CreateWorldCupContentDto[],
+  ): Promise<number[]> {
     return this.prisma.$transaction(async (transaction) => {
       const ownedWorldCup = await transaction.worldCup.findFirst({
         where: { id: worldCupId, ownerId: memberId },
@@ -26,33 +37,55 @@ export class ManageWorldCupContentsService {
         orderBy: [{ sortOrder: 'desc' }, { id: 'desc' }],
         select: { sortOrder: true },
       });
-      const media = request.createMediaFileRequest;
-      const mediaFile = await transaction.mediaFile.create({
-        data: {
-          fileType: media.fileType,
-          detailType: media.detailFileType,
-          objectKey: null,
-          thumbnailObjectKey: null,
-          externalUrl: media.mediaData,
-          originalName: null,
-          videoStartTime: media.videoStartTime,
-          videoPlayDuration: media.videoPlayDuration,
-        },
-        select: { id: true },
-      });
-      const candidate = await transaction.candidate.create({
-        data: {
-          worldCupId,
-          name: request.contentsName,
-          mediaFileId: mediaFile.id,
-          visibleType: request.visibleType,
-          sortOrder: (lastCandidate?.sortOrder ?? -1) + 1,
-        },
-        select: { id: true },
-      });
 
-      return candidate.id;
+      const firstSortOrder = (lastCandidate?.sortOrder ?? -1) + 1;
+      const candidateIds: number[] = [];
+      for (const [index, request] of requests.entries()) {
+        const candidateId = await this.createCandidate(
+          transaction,
+          worldCupId,
+          request,
+          firstSortOrder + index,
+        );
+        candidateIds.push(candidateId);
+      }
+
+      return candidateIds;
     });
+  }
+
+  private async createCandidate(
+    transaction: Prisma.TransactionClient,
+    worldCupId: number,
+    request: CreateWorldCupContentDto,
+    sortOrder: number,
+  ): Promise<number> {
+    const media = request.createMediaFileRequest;
+    const mediaFile = await transaction.mediaFile.create({
+      data: {
+        fileType: media.fileType,
+        detailType: media.detailFileType,
+        objectKey: null,
+        thumbnailObjectKey: null,
+        externalUrl: media.mediaData,
+        originalName: null,
+        videoStartTime: media.videoStartTime,
+        videoPlayDuration: media.videoPlayDuration,
+      },
+      select: { id: true },
+    });
+    const candidate = await transaction.candidate.create({
+      data: {
+        worldCupId,
+        name: request.contentsName,
+        mediaFileId: mediaFile.id,
+        visibleType: request.visibleType,
+        sortOrder,
+      },
+      select: { id: true },
+    });
+
+    return candidate.id;
   }
 
   async findAll(

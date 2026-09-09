@@ -2,13 +2,16 @@ import type { PrismaService } from '../prisma/prisma.service.js';
 import type { CreateWorldCupContentDto } from './dto/create-world-cup-contents.dto.js';
 import { ManageWorldCupContentsService } from './manage-world-cup-contents.service.js';
 
-function youtubeCandidate(): CreateWorldCupContentDto {
+function youtubeCandidate(
+  contentsName = '후보 A',
+  videoId = 'video-id',
+): CreateWorldCupContentDto {
   return {
-    contentsName: '후보 A',
+    contentsName,
     visibleType: 'PRIVATE',
     createMediaFileRequest: {
       fileType: 'INTERNET_VIDEO_URL',
-      mediaData: 'https://www.youtube.com/watch?v=video-id',
+      mediaData: `https://www.youtube.com/watch?v=${videoId}`,
       originalName: 'ignored-name',
       videoStartTime: '00030',
       videoPlayDuration: 3,
@@ -18,6 +21,118 @@ function youtubeCandidate(): CreateWorldCupContentDto {
 }
 
 describe('ManageWorldCupContentsService', () => {
+  it('stores multiple candidates in request order with consecutive sort orders', async () => {
+    const transaction = {
+      worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
+      candidate: {
+        findFirst: vi.fn().mockResolvedValue({ sortOrder: 4 }),
+        create: vi
+          .fn()
+          .mockResolvedValueOnce({ id: 15 })
+          .mockResolvedValueOnce({ id: 16 })
+          .mockResolvedValueOnce({ id: 17 }),
+      },
+      mediaFile: {
+        create: vi
+          .fn()
+          .mockResolvedValueOnce({ id: 25 })
+          .mockResolvedValueOnce({ id: 26 })
+          .mockResolvedValueOnce({ id: 27 }),
+      },
+    };
+    const $transaction = vi
+      .fn()
+      .mockImplementation(
+        (operation: (client: typeof transaction) => Promise<number[]>) =>
+          operation(transaction),
+      );
+    const service = new ManageWorldCupContentsService({
+      $transaction,
+    } as unknown as PrismaService);
+
+    await expect(
+      service.createMany(7, 3, [
+        youtubeCandidate('후보 A', 'video-a'),
+        youtubeCandidate('후보 B', 'video-b'),
+        youtubeCandidate('후보 C', 'video-c'),
+      ]),
+    ).resolves.toEqual([15, 16, 17]);
+
+    expect($transaction).toHaveBeenCalledOnce();
+    expect(transaction.worldCup.findFirst).toHaveBeenCalledOnce();
+    expect(transaction.candidate.findFirst).toHaveBeenCalledOnce();
+    expect(transaction.candidate.create).toHaveBeenNthCalledWith(1, {
+      data: {
+        worldCupId: 3,
+        name: '후보 A',
+        mediaFileId: 25,
+        visibleType: 'PRIVATE',
+        sortOrder: 5,
+      },
+      select: { id: true },
+    });
+    expect(transaction.candidate.create).toHaveBeenNthCalledWith(2, {
+      data: {
+        worldCupId: 3,
+        name: '후보 B',
+        mediaFileId: 26,
+        visibleType: 'PRIVATE',
+        sortOrder: 6,
+      },
+      select: { id: true },
+    });
+    expect(transaction.candidate.create).toHaveBeenNthCalledWith(3, {
+      data: {
+        worldCupId: 3,
+        name: '후보 C',
+        mediaFileId: 27,
+        visibleType: 'PRIVATE',
+        sortOrder: 7,
+      },
+      select: { id: true },
+    });
+  });
+
+  it('rejects the single transaction when a middle candidate fails', async () => {
+    const transaction = {
+      worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
+      candidate: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create: vi
+          .fn()
+          .mockResolvedValueOnce({ id: 15 })
+          .mockRejectedValueOnce(new Error('candidate write failed')),
+      },
+      mediaFile: {
+        create: vi
+          .fn()
+          .mockResolvedValueOnce({ id: 25 })
+          .mockResolvedValueOnce({ id: 26 }),
+      },
+    };
+    const $transaction = vi
+      .fn()
+      .mockImplementation(
+        (operation: (client: typeof transaction) => Promise<number[]>) =>
+          operation(transaction),
+      );
+    const service = new ManageWorldCupContentsService({
+      $transaction,
+    } as unknown as PrismaService);
+
+    await expect(
+      service.createMany(7, 3, [
+        youtubeCandidate('후보 A', 'video-a'),
+        youtubeCandidate('후보 B', 'video-b'),
+        youtubeCandidate('후보 C', 'video-c'),
+      ]),
+    ).rejects.toThrow('candidate write failed');
+
+    expect($transaction).toHaveBeenCalledOnce();
+    expect(transaction.mediaFile.create).toHaveBeenCalledTimes(2);
+    expect(transaction.candidate.create).toHaveBeenCalledTimes(2);
+  });
+
   it('stores one owned YouTube candidate and its media in one transaction', async () => {
     const transaction = {
       worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
@@ -30,7 +145,7 @@ describe('ManageWorldCupContentsService', () => {
     const $transaction = vi
       .fn()
       .mockImplementation(
-        (operation: (client: typeof transaction) => Promise<number>) =>
+        (operation: (client: typeof transaction) => Promise<number[]>) =>
           operation(transaction),
       );
     const service = new ManageWorldCupContentsService({
