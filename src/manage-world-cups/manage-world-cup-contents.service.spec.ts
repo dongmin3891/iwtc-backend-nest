@@ -23,6 +23,7 @@ function youtubeCandidate(
 describe('ManageWorldCupContentsService', () => {
   it('stores multiple candidates in request order with consecutive sort orders', async () => {
     const transaction = {
+      $queryRaw: vi.fn().mockResolvedValue([{ pg_advisory_xact_lock: null }]),
       worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
       candidate: {
         findFirst: vi.fn().mockResolvedValue({ sortOrder: 4 }),
@@ -60,7 +61,20 @@ describe('ManageWorldCupContentsService', () => {
 
     expect($transaction).toHaveBeenCalledOnce();
     expect(transaction.worldCup.findFirst).toHaveBeenCalledOnce();
+    expect(transaction.$queryRaw).toHaveBeenCalledOnce();
     expect(transaction.candidate.findFirst).toHaveBeenCalledOnce();
+    const [query, lockNamespace, lockedWorldCupId] =
+      transaction.$queryRaw.mock.calls[0]!;
+    expect(Array.from(query as TemplateStringsArray)).toEqual([
+      '\n        SELECT pg_advisory_xact_lock(\n          CAST(',
+      ' AS INTEGER),\n          CAST(',
+      ' AS INTEGER)\n        )\n      ',
+    ]);
+    expect(lockNamespace).toBe(0x49575443);
+    expect(lockedWorldCupId).toBe(3);
+    expect(transaction.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      transaction.candidate.findFirst.mock.invocationCallOrder[0]!,
+    );
     expect(transaction.candidate.create).toHaveBeenNthCalledWith(1, {
       data: {
         worldCupId: 3,
@@ -95,6 +109,7 @@ describe('ManageWorldCupContentsService', () => {
 
   it('rejects the single transaction when a middle candidate fails', async () => {
     const transaction = {
+      $queryRaw: vi.fn().mockResolvedValue([{ pg_advisory_xact_lock: null }]),
       worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
       candidate: {
         findFirst: vi.fn().mockResolvedValue(null),
@@ -135,6 +150,7 @@ describe('ManageWorldCupContentsService', () => {
 
   it('stores one owned YouTube candidate and its media in one transaction', async () => {
     const transaction = {
+      $queryRaw: vi.fn().mockResolvedValue([{ pg_advisory_xact_lock: null }]),
       worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
       candidate: {
         findFirst: vi.fn().mockResolvedValue({ sortOrder: 4 }),
@@ -191,6 +207,7 @@ describe('ManageWorldCupContentsService', () => {
   it('starts the candidate order at zero for an empty world cup', async () => {
     const candidateCreate = vi.fn().mockResolvedValue({ id: 15 });
     const transaction = {
+      $queryRaw: vi.fn().mockResolvedValue([{ pg_advisory_xact_lock: null }]),
       worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
       candidate: {
         findFirst: vi.fn().mockResolvedValue(null),
@@ -216,6 +233,7 @@ describe('ManageWorldCupContentsService', () => {
 
   it('does not write media or a candidate when the member is not the owner', async () => {
     const transaction = {
+      $queryRaw: vi.fn(),
       worldCup: { findFirst: vi.fn().mockResolvedValue(null) },
       candidate: { findFirst: vi.fn(), create: vi.fn() },
       mediaFile: { create: vi.fn() },
@@ -234,6 +252,7 @@ describe('ManageWorldCupContentsService', () => {
       message: '월드컵을 찾을 수 없습니다.',
     });
     expect(transaction.candidate.findFirst).not.toHaveBeenCalled();
+    expect(transaction.$queryRaw).not.toHaveBeenCalled();
     expect(transaction.mediaFile.create).not.toHaveBeenCalled();
     expect(transaction.candidate.create).not.toHaveBeenCalled();
   });

@@ -4,6 +4,8 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import type { CreateWorldCupContentDto } from './dto/create-world-cup-contents.dto.js';
 import type { ManagedWorldCupContent } from './manage-world-cup-contents.types.js';
 
+const CANDIDATE_ORDER_LOCK_NAMESPACE = 0x49575443;
+
 @Injectable()
 export class ManageWorldCupContentsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -31,6 +33,13 @@ export class ManageWorldCupContentsService {
       if (!ownedWorldCup) {
         throw new NotFoundException('월드컵을 찾을 수 없습니다.');
       }
+
+      await transaction.$queryRaw`
+        SELECT pg_advisory_xact_lock(
+          CAST(${CANDIDATE_ORDER_LOCK_NAMESPACE} AS INTEGER),
+          CAST(${worldCupId} AS INTEGER)
+        )
+      `;
 
       const lastCandidate = await transaction.candidate.findFirst({
         where: { worldCupId },
