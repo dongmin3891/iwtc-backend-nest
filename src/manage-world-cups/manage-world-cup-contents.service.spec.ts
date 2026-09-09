@@ -1,5 +1,6 @@
 import type { PrismaService } from '../prisma/prisma.service.js';
 import type { CreateWorldCupContentDto } from './dto/create-world-cup-contents.dto.js';
+import type { UpdateWorldCupContentsDto } from './dto/update-world-cup-contents.dto.js';
 import { ManageWorldCupContentsService } from './manage-world-cup-contents.service.js';
 
 function youtubeCandidate(
@@ -17,6 +18,18 @@ function youtubeCandidate(
       videoPlayDuration: 3,
       detailFileType: 'YOU_TUBE_URL',
     },
+  };
+}
+
+function youtubeCandidateUpdate(): UpdateWorldCupContentsDto {
+  return {
+    contentsName: '수정 후보',
+    originalName: 'ignored-name',
+    mediaData: 'https://www.youtube.com/watch?v=updated-video',
+    detailFileType: 'YOU_TUBE_URL',
+    videoStartTime: '00120',
+    videoPlayDuration: 5,
+    visibleType: 'PUBLIC',
   };
 }
 
@@ -255,6 +268,141 @@ describe('ManageWorldCupContentsService', () => {
     expect(transaction.$queryRaw).not.toHaveBeenCalled();
     expect(transaction.mediaFile.create).not.toHaveBeenCalled();
     expect(transaction.candidate.create).not.toHaveBeenCalled();
+  });
+
+  it('updates an owned candidate and its YouTube media in one transaction', async () => {
+    const transaction = {
+      worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
+      candidate: {
+        findFirst: vi.fn().mockResolvedValue({ id: 15, mediaFileId: 25 }),
+        update: vi.fn().mockResolvedValue({ id: 15 }),
+      },
+      mediaFile: { update: vi.fn().mockResolvedValue({ id: 25 }) },
+    };
+    const $transaction = vi
+      .fn()
+      .mockImplementation(
+        (operation: (client: typeof transaction) => Promise<number>) =>
+          operation(transaction),
+      );
+    const service = new ManageWorldCupContentsService({
+      $transaction,
+    } as unknown as PrismaService);
+
+    await expect(
+      service.updateOne(7, 3, 15, youtubeCandidateUpdate()),
+    ).resolves.toBe(15);
+
+    expect($transaction).toHaveBeenCalledOnce();
+    expect(transaction.worldCup.findFirst).toHaveBeenCalledWith({
+      where: { id: 3, ownerId: 7 },
+      select: { id: true },
+    });
+    expect(transaction.candidate.findFirst).toHaveBeenCalledWith({
+      where: { id: 15, worldCupId: 3 },
+      select: { id: true, mediaFileId: true },
+    });
+    expect(transaction.mediaFile.update).toHaveBeenCalledWith({
+      where: { id: 25 },
+      data: {
+        fileType: 'INTERNET_VIDEO_URL',
+        detailType: 'YOU_TUBE_URL',
+        objectKey: null,
+        thumbnailObjectKey: null,
+        externalUrl: 'https://www.youtube.com/watch?v=updated-video',
+        originalName: null,
+        videoStartTime: '00120',
+        videoPlayDuration: 5,
+      },
+    });
+    expect(transaction.candidate.update).toHaveBeenCalledWith({
+      where: { id: 15 },
+      data: { name: '수정 후보', visibleType: 'PUBLIC' },
+      select: { id: true },
+    });
+    expect(
+      transaction.mediaFile.update.mock.invocationCallOrder[0],
+    ).toBeLessThan(transaction.candidate.update.mock.invocationCallOrder[0]!);
+  });
+
+  it('does not look up or update a candidate when the member is not the owner', async () => {
+    const transaction = {
+      worldCup: { findFirst: vi.fn().mockResolvedValue(null) },
+      candidate: { findFirst: vi.fn(), update: vi.fn() },
+      mediaFile: { update: vi.fn() },
+    };
+    const prisma = {
+      $transaction: (
+        operation: (client: typeof transaction) => Promise<number>,
+      ) => operation(transaction),
+    } as unknown as PrismaService;
+    const service = new ManageWorldCupContentsService(prisma);
+
+    await expect(
+      service.updateOne(8, 3, 15, youtubeCandidateUpdate()),
+    ).rejects.toMatchObject({
+      status: 404,
+      message: '월드컵을 찾을 수 없습니다.',
+    });
+    expect(transaction.candidate.findFirst).not.toHaveBeenCalled();
+    expect(transaction.mediaFile.update).not.toHaveBeenCalled();
+    expect(transaction.candidate.update).not.toHaveBeenCalled();
+  });
+
+  it('does not reveal a missing candidate or one from another world cup', async () => {
+    const transaction = {
+      worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
+      candidate: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        update: vi.fn(),
+      },
+      mediaFile: { update: vi.fn() },
+    };
+    const prisma = {
+      $transaction: (
+        operation: (client: typeof transaction) => Promise<number>,
+      ) => operation(transaction),
+    } as unknown as PrismaService;
+    const service = new ManageWorldCupContentsService(prisma);
+
+    await expect(
+      service.updateOne(7, 3, 99, youtubeCandidateUpdate()),
+    ).rejects.toMatchObject({
+      status: 404,
+      message: '월드컵 후보를 찾을 수 없습니다.',
+    });
+    expect(transaction.candidate.findFirst).toHaveBeenCalledWith({
+      where: { id: 99, worldCupId: 3 },
+      select: { id: true, mediaFileId: true },
+    });
+    expect(transaction.mediaFile.update).not.toHaveBeenCalled();
+    expect(transaction.candidate.update).not.toHaveBeenCalled();
+  });
+
+  it('does not update a candidate without a linked media file', async () => {
+    const transaction = {
+      worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
+      candidate: {
+        findFirst: vi.fn().mockResolvedValue({ id: 15, mediaFileId: null }),
+        update: vi.fn(),
+      },
+      mediaFile: { update: vi.fn() },
+    };
+    const prisma = {
+      $transaction: (
+        operation: (client: typeof transaction) => Promise<number>,
+      ) => operation(transaction),
+    } as unknown as PrismaService;
+    const service = new ManageWorldCupContentsService(prisma);
+
+    await expect(
+      service.updateOne(7, 3, 15, youtubeCandidateUpdate()),
+    ).rejects.toMatchObject({
+      status: 404,
+      message: '미디어 파일을 찾을 수 없습니다.',
+    });
+    expect(transaction.mediaFile.update).not.toHaveBeenCalled();
+    expect(transaction.candidate.update).not.toHaveBeenCalled();
   });
 
   it('returns owned contents in management order with derived scores and ranks', async () => {

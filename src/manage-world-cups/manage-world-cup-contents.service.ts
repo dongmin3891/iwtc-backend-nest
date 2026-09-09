@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { CreateWorldCupContentDto } from './dto/create-world-cup-contents.dto.js';
+import type { UpdateWorldCupContentsDto } from './dto/update-world-cup-contents.dto.js';
 import type { ManagedWorldCupContent } from './manage-world-cup-contents.types.js';
 
 const CANDIDATE_ORDER_LOCK_NAMESPACE = 0x49575443;
@@ -95,6 +96,58 @@ export class ManageWorldCupContentsService {
     });
 
     return candidate.id;
+  }
+
+  async updateOne(
+    memberId: number,
+    worldCupId: number,
+    contentsId: number,
+    request: UpdateWorldCupContentsDto,
+  ): Promise<number> {
+    return this.prisma.$transaction(async (transaction) => {
+      const ownedWorldCup = await transaction.worldCup.findFirst({
+        where: { id: worldCupId, ownerId: memberId },
+        select: { id: true },
+      });
+      if (!ownedWorldCup) {
+        throw new NotFoundException('월드컵을 찾을 수 없습니다.');
+      }
+
+      const candidate = await transaction.candidate.findFirst({
+        where: { id: contentsId, worldCupId },
+        select: { id: true, mediaFileId: true },
+      });
+      if (!candidate) {
+        throw new NotFoundException('월드컵 후보를 찾을 수 없습니다.');
+      }
+      if (candidate.mediaFileId === null) {
+        throw new NotFoundException('미디어 파일을 찾을 수 없습니다.');
+      }
+
+      await transaction.mediaFile.update({
+        where: { id: candidate.mediaFileId },
+        data: {
+          fileType: 'INTERNET_VIDEO_URL',
+          detailType: request.detailFileType,
+          objectKey: null,
+          thumbnailObjectKey: null,
+          externalUrl: request.mediaData,
+          originalName: null,
+          videoStartTime: request.videoStartTime,
+          videoPlayDuration: request.videoPlayDuration,
+        },
+      });
+      const updatedCandidate = await transaction.candidate.update({
+        where: { id: candidate.id },
+        data: {
+          name: request.contentsName,
+          visibleType: request.visibleType,
+        },
+        select: { id: true },
+      });
+
+      return updatedCandidate.id;
+    });
   }
 
   async findAll(
