@@ -17,13 +17,13 @@
 
 | 용도               | 저장소                                                 | 기준 브랜치                 | 기능 기준 커밋 |
 | ------------------ | ------------------------------------------------------ | --------------------------- | -------------- |
-| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `23e80eb`      |
-| 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `0d7f475`      |
+| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `6a66218`      |
+| 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `64c2327`      |
 | 기존 Spring 참고용 | `https://github.com/dongmin3891/iwtc-backend-new.git`  | `codex/nest-migration-plan` | `3703d2d`      |
 
 신규 개발 코드는 `iwtc-backend-nest`에 작성한다. `iwtc-backend-new`를 신규 서버로 배포하지 않는다.
 
-게임 결과·랭킹·미디어·회원·비회원 댓글·회원 인증·회원 댓글 삭제·내 월드컵 목록·상세·생성 구현과 프론트엔드의 게임 완료·댓글 작성·삭제·로그인 화면 수정은 각 원격 기준 브랜치에 push되어 있다. `iwtc.code-workspace`는 신규 백엔드 작업 트리에만 있는 로컬 편의 파일이며 커밋하지 않았다.
+게임 결과·랭킹·미디어·회원·비회원 댓글·회원 인증·회원 댓글 삭제·내 월드컵 목록·상세·생성·관리용 후보 목록 구현과 프론트엔드의 게임 완료·댓글 작성·삭제·로그인·후보 응답 매핑 수정은 각 원격 기준 브랜치에 push되어 있다. `iwtc.code-workspace`는 신규 백엔드 작업 트리에만 있는 로컬 편의 파일이며 커밋하지 않았다.
 
 ## 3. 새 환경에 내려받기
 
@@ -143,6 +143,7 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 - 댓글 본문·닉네임 검증과 공개 후보 소속 확인
 - 로그인 회원의 월드컵 목록·상세 조회와 생성
 - 월드컵 생성 시 소유자 연결과 다른 회원 월드컵 접근 차단
+- 소유자 전용 관리 후보 목록과 누적 점수·공동순위 조회
 - 새 PostgreSQL 회원가입과 Argon2id 비밀번호 해시
 - 로그인, 내 회원 정보 조회, 세션 단위 로그아웃
 - HttpOnly refresh token 쿠키와 일회성 rotation
@@ -171,6 +172,7 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 | GET    | `/api/me/game-manage/world-cups`                              | 완료 |
 | GET    | `/api/me/game-manage/world-cups/{worldCupId}`                 | 완료 |
 | POST   | `/api/me/game-manage/world-cups`                              | 완료 |
+| GET    | `/api/me/game-contents-manage/world-cups/{worldCupId}/manage-contents` | 완료 |
 
 개발용 seed는 공개 월드컵 1개와 `후보 A`부터 `후보 D`까지 총 4개 후보를 만든다. 후보 ID는 실행 환경에 따라 달라질 수 있으므로 코드에서 특정 ID를 전제로 사용하지 않는다.
 
@@ -183,6 +185,8 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 회원은 기존 데이터를 이관하지 않고 새로 가입한다. `serviceId`는 영문·숫자 6–10자로 받고 소문자로 정규화하며, 닉네임은 공백 없는 2–10자다. 비밀번호는 8–16자의 영문·숫자·특수문자 조합이고 Argon2id 해시만 DB에 저장한다. access token은 15분이며 프론트 호환을 위해 `access-token` 헤더를 사용한다. refresh token은 30일짜리 HttpOnly 쿠키이고 DB에는 SHA-256 해시만 저장한다. 갱신 때마다 토큰과 세션을 교체하며 이전 토큰 재사용 시 같은 family의 세션을 모두 폐기한다. 로그아웃은 POST이며 refresh cookie 삭제와 서버 세션 폐기를 함께 수행한다.
 
 월드컵 관리 목록과 상세, 생성 API는 로그인이 필수다. 생성 시 현재 회원의 ID를 `WorldCup.ownerId`에 저장하고, 목록과 상세 조회는 같은 `ownerId`만 조회한다. 다른 회원 소유이거나 존재하지 않는 월드컵 상세는 모두 HTTP 404를 반환해 존재 여부를 노출하지 않는다. 제목은 공백 제거 후 1~100자, 설명은 선택값으로 최대 100자, 공개 여부는 `PUBLIC` 또는 `PRIVATE`만 허용한다. 기존 스키마에 `ownerId`가 이미 있으므로 이 단계에서 새 migration은 만들지 않았다.
+
+관리용 후보 목록은 월드컵 소유권을 먼저 확인한 뒤 공개·비공개 후보를 모두 `sortOrder`, 후보 ID 순서로 반환한다. 후보 ID 필드는 기존 Spring의 잘못된 `worldCupId` 이름을 유지하지 않고 `contentsId`로 바로잡았으며 프론트 매핑도 함께 수정했다. 후보별 게임 결과 점수를 합산하고 동점에는 같은 순위를 부여한다. 미디어가 없는 후보는 `mediaFileId: null`이며 프론트는 미디어 조회를 건너뛴다. 실제 미디어 내용은 기존 `/api/media-files/{mediaFileId}` API로 조회한다.
 
 ## 8. 현재 확인된 사용자 흐름
 
@@ -211,6 +215,8 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 
 월드컵 관리 API는 실제 로컬 PostgreSQL에서 회원가입, 로그인, 비공개 월드컵 생성, 내 목록과 상세 조회까지 확인했다. 다른 검증 회원으로 같은 월드컵 상세를 요청했을 때 HTTP 404가 반환되는 것도 확인했다. 이 과정에서 만든 검증용 회원·세션·월드컵은 확인 후 모두 삭제했다.
 
+관리용 후보 목록도 실제 PostgreSQL에서 공개·비공개 후보 3개와 게임 결과를 만들어 관리 순서, 정식 `contentsId`, 누적 점수, 순위, 미디어 ID를 확인했다. 다른 회원 요청은 HTTP 404로 차단되었다. 검증용 회원·세션·월드컵·후보·게임 결과·미디어는 확인 후 모두 삭제했다.
+
 ## 9. 검증 명령
 
 백엔드:
@@ -222,7 +228,7 @@ npm run test:e2e
 npm run build
 ```
 
-마지막 작업 기준으로 Prisma 검증, 린트, 빌드, 단위 테스트 59개, API 통합 테스트 39개가 모두 통과했다.
+마지막 작업 기준으로 Prisma 검증, 린트, 빌드, 단위 테스트 62개, API 통합 테스트 41개가 모두 통과했다.
 
 프론트엔드:
 
@@ -232,7 +238,7 @@ npm run lint
 npm test
 ```
 
-마지막 작업 기준으로 프론트 타입 검사, 테스트 57개, 프로덕션 빌드가 통과했다. 기존 `<img>` 사용과 관련된 Next.js 린트 경고가 있으나 실패는 아니다. `npm ci`에서 기존 의존성 취약점이 보고되었으며, 별도 검토 없이 강제 자동 수정하지 않는다.
+마지막 작업 기준으로 프론트 타입 검사, 테스트 58개, 프로덕션 빌드가 통과했다. 기존 `<img>` 사용과 관련된 Next.js 린트 경고가 있으나 실패는 아니다. `npm ci`에서 기존 의존성 취약점이 보고되었으며, 별도 검토 없이 강제 자동 수정하지 않는다.
 
 ## 10. 참고 문서
 
@@ -245,11 +251,13 @@ npm test
 
 ## 11. 다음 작업
 
-내 월드컵 목록·상세·생성과 소유자 연결까지 완료되었다. 가장 자연스러운 다음 작업은 관리용 후보 목록 조회 API를 먼저 구현하는 것이다. 월드컵 소유권을 확인한 뒤 후보 ID와 미디어 메타데이터를 프론트엔드 `ManageWorldCupService` 계약에 맞게 반환한다. 그다음 후보 생성·수정·삭제를 나누어 구현하며, 실제 파일 업로드는 오브젝트 스토리지 정책을 정한 뒤 연결한다.
+관리용 후보 목록까지 완료되었다. 가장 자연스러운 다음 작업은 후보 일괄 생성 API다. 먼저 현재 저장 구조로 완결할 수 있는 유튜브 URL 후보를 구현하고, 정적 이미지·동영상 파일은 base64를 DB에 저장하지 말고 오브젝트 스토리지 업로드 정책을 확정한 뒤 연결한다. 모든 요청에서 월드컵 소유권을 확인하고, 후보 `sortOrder`는 같은 월드컵 안에서 충돌하지 않도록 트랜잭션으로 배정한다.
+
+후보 삭제는 게임 결과가 후보를 `NoAction` 외래 키로 참조하므로 현재 상태에서 단순 hard delete가 실패한다. 삭제 API 구현 전 후보 soft delete 필드 추가 또는 과거 게임 결과 처리 정책을 먼저 결정해야 한다. 월드컵 삭제도 같은 이유로 게임 결과를 먼저 처리하지 않으면 실패하므로 별도 단계로 둔다.
 
 그다음 우선순위는 다음과 같다.
 
-1. 관리용 후보 목록과 후보 생성·수정·삭제
+1. 후보 일괄 생성, 수정, 삭제
 2. 실제 S3 호환 오브젝트 스토리지와 미디어 업로드
 3. GitHub Actions, GHCR, Kubernetes, Argo CD 배포
 4. PostgreSQL 백업과 복구 테스트
@@ -258,4 +266,4 @@ npm test
 
 새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
 
-> `iwtc-backend-nest/HANDOFF.md`와 기존 참고 저장소의 `API_CONTRACT.md`를 먼저 읽어줘. 기존 DB, 회원 데이터와 비밀번호는 사용하지 않고 PostgreSQL 새 데이터 기준으로 진행한다. 현재 완료된 내 월드컵 목록·상세·생성과 소유자 권한 구현을 확인한 뒤, `iwtc-frontend-new`의 `ManageWorldCupService` 요청 형식에 맞는 관리용 후보 목록 조회부터 구현해줘. 모든 후보 관리 요청에서 월드컵 소유권을 확인하고, 실제 파일 업로드는 오브젝트 스토리지 정책을 확정하기 전까지 분리해줘.
+> `iwtc-backend-nest/HANDOFF.md`와 기존 참고 저장소의 `API_CONTRACT.md`를 먼저 읽어줘. 기존 DB, 회원 데이터와 비밀번호는 사용하지 않고 PostgreSQL 새 데이터 기준으로 진행한다. 현재 완료된 관리용 후보 목록과 프론트의 `contentsId` 매핑을 확인한 뒤, `ManageWorldCupService` 요청 형식에 맞는 후보 일괄 생성 API를 구현해줘. 먼저 유튜브 URL 후보를 지원하고, 정적 파일은 base64를 DB에 저장하지 말고 오브젝트 스토리지 업로드 정책과 분리해줘. 모든 요청에서 월드컵 소유권과 `sortOrder` 충돌을 검증해줘.
