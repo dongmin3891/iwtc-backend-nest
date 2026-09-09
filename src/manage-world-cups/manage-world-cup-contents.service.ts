@@ -38,7 +38,7 @@ export class ManageWorldCupContentsService {
         SELECT pg_advisory_xact_lock(
           CAST(${CANDIDATE_ORDER_LOCK_NAMESPACE} AS INTEGER),
           CAST(${worldCupId} AS INTEGER)
-        )
+        ) IS NULL AS "locked"
       `;
 
       const lastCandidate = await transaction.candidate.findFirst({

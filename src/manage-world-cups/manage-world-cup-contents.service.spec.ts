@@ -23,7 +23,7 @@ function youtubeCandidate(
 describe('ManageWorldCupContentsService', () => {
   it('stores multiple candidates in request order with consecutive sort orders', async () => {
     const transaction = {
-      $queryRaw: vi.fn().mockResolvedValue([{ pg_advisory_xact_lock: null }]),
+      $queryRaw: vi.fn().mockResolvedValue([{ locked: true }]),
       worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
       candidate: {
         findFirst: vi.fn().mockResolvedValue({ sortOrder: 4 }),
@@ -68,7 +68,7 @@ describe('ManageWorldCupContentsService', () => {
     expect(Array.from(query as TemplateStringsArray)).toEqual([
       '\n        SELECT pg_advisory_xact_lock(\n          CAST(',
       ' AS INTEGER),\n          CAST(',
-      ' AS INTEGER)\n        )\n      ',
+      ' AS INTEGER)\n        ) IS NULL AS "locked"\n      ',
     ]);
     expect(lockNamespace).toBe(0x49575443);
     expect(lockedWorldCupId).toBe(3);
@@ -109,7 +109,7 @@ describe('ManageWorldCupContentsService', () => {
 
   it('rejects the single transaction when a middle candidate fails', async () => {
     const transaction = {
-      $queryRaw: vi.fn().mockResolvedValue([{ pg_advisory_xact_lock: null }]),
+      $queryRaw: vi.fn().mockResolvedValue([{ locked: true }]),
       worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
       candidate: {
         findFirst: vi.fn().mockResolvedValue(null),
@@ -150,7 +150,7 @@ describe('ManageWorldCupContentsService', () => {
 
   it('stores one owned YouTube candidate and its media in one transaction', async () => {
     const transaction = {
-      $queryRaw: vi.fn().mockResolvedValue([{ pg_advisory_xact_lock: null }]),
+      $queryRaw: vi.fn().mockResolvedValue([{ locked: true }]),
       worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
       candidate: {
         findFirst: vi.fn().mockResolvedValue({ sortOrder: 4 }),
@@ -207,7 +207,7 @@ describe('ManageWorldCupContentsService', () => {
   it('starts the candidate order at zero for an empty world cup', async () => {
     const candidateCreate = vi.fn().mockResolvedValue({ id: 15 });
     const transaction = {
-      $queryRaw: vi.fn().mockResolvedValue([{ pg_advisory_xact_lock: null }]),
+      $queryRaw: vi.fn().mockResolvedValue([{ locked: true }]),
       worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
       candidate: {
         findFirst: vi.fn().mockResolvedValue(null),
