@@ -307,6 +307,7 @@ export class WorldCupsService {
       where: {
         worldCupId,
         visibleType: 'PUBLIC',
+        deletedAt: null,
       },
       select: {
         id: true,

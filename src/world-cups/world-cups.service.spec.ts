@@ -464,24 +464,22 @@ describe('WorldCupsService', () => {
     await expect(service.saveGameResult(1, request)).resolves.toHaveLength(2);
   });
 
-  it('ranks public candidates by accumulated score and includes zero scores', async () => {
+  it('ranks active public candidates by accumulated score and includes zero scores', async () => {
+    const findMany = vi.fn().mockResolvedValue([
+      { id: 1, name: '후보 A', mediaFileId: 11 },
+      { id: 2, name: '후보 B', mediaFileId: 12 },
+      { id: 3, name: '후보 C', mediaFileId: null },
+      { id: 4, name: '후보 D', mediaFileId: 14 },
+    ]);
+    const groupBy = vi.fn().mockResolvedValue([
+      { candidateId: 1, _sum: { score: 20 } },
+      { candidateId: 2, _sum: { score: 7 } },
+      { candidateId: 3, _sum: { score: 7 } },
+    ]);
     const prisma = {
       worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 1 }) },
-      candidate: {
-        findMany: vi.fn().mockResolvedValue([
-          { id: 1, name: '후보 A', mediaFileId: 11 },
-          { id: 2, name: '후보 B', mediaFileId: 12 },
-          { id: 3, name: '후보 C', mediaFileId: null },
-          { id: 4, name: '후보 D', mediaFileId: 14 },
-        ]),
-      },
-      gamePlacement: {
-        groupBy: vi.fn().mockResolvedValue([
-          { candidateId: 1, _sum: { score: 20 } },
-          { candidateId: 2, _sum: { score: 7 } },
-          { candidateId: 3, _sum: { score: 7 } },
-        ]),
-      },
+      candidate: { findMany },
+      gamePlacement: { groupBy },
     } as unknown as PrismaService;
     const service = new WorldCupsService(prisma);
 
@@ -515,6 +513,23 @@ describe('WorldCupsService', () => {
         gameScore: 0,
       },
     ]);
+    expect(findMany).toHaveBeenCalledWith({
+      where: {
+        worldCupId: 1,
+        visibleType: 'PUBLIC',
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        mediaFileId: true,
+      },
+    });
+    expect(groupBy).toHaveBeenCalledWith({
+      by: ['candidateId'],
+      where: { candidateId: { in: [1, 2, 3, 4] } },
+      _sum: { score: true },
+    });
   });
 
   it('rejects ranking requests for an unknown world cup', async () => {
