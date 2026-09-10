@@ -27,11 +27,16 @@ describe('WorldCupsService', () => {
         orderBy: { id: 'desc' },
         skip: 0,
         take: 20,
+        include: {
+          candidates: expect.objectContaining({
+            where: { visibleType: 'PUBLIC', deletedAt: null },
+          }),
+        },
       }),
     );
   });
 
-  it('returns supported rounds that fit the public candidate count', async () => {
+  it('returns supported rounds that fit the active public candidate count', async () => {
     const findFirst = vi.fn().mockResolvedValue({
       id: 1,
       title: '첫 번째 월드컵',
@@ -49,6 +54,19 @@ describe('WorldCupsService', () => {
       worldCupDescription: '설명',
       rounds: [2, 4],
     });
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          _count: {
+            select: {
+              candidates: {
+                where: { visibleType: 'PUBLIC', deletedAt: null },
+              },
+            },
+          },
+        }),
+      }),
+    );
   });
 
   it('rejects an unknown world cup', async () => {

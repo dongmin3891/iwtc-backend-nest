@@ -67,7 +67,7 @@ export class WorldCupsService {
         take: query.size,
         include: {
           candidates: {
-            where: { visibleType: 'PUBLIC' },
+            where: { visibleType: 'PUBLIC', deletedAt: null },
             orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
             take: 2,
           },
@@ -107,7 +107,7 @@ export class WorldCupsService {
         _count: {
           select: {
             candidates: {
-              where: { visibleType: 'PUBLIC' },
+              where: { visibleType: 'PUBLIC', deletedAt: null },
             },
           },
         },
