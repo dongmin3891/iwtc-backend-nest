@@ -1,6 +1,6 @@
 # IWTC 개발 인수인계
 
-마지막 확인일: 2026-09-09
+마지막 확인일: 2026-09-10
 
 이 문서는 다른 컴퓨터나 새 Cursor 환경에서 IWTC 개발을 바로 이어가기 위한 현재 상태와 실행 절차를 정리한다.
 
@@ -17,8 +17,8 @@
 
 | 용도               | 저장소                                                 | 기준 브랜치                 | 기능 기준 커밋 |
 | ------------------ | ------------------------------------------------------ | --------------------------- | -------------- |
-| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `4317c81`      |
-| 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `11f71c8`      |
+| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `e87f2e3`      |
+| 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `5cbf787`      |
 | 기존 Spring 참고용 | `https://github.com/dongmin3891/iwtc-backend-new.git`  | `codex/nest-migration-plan` | `3703d2d`      |
 
 신규 개발 코드는 `iwtc-backend-nest`에 작성한다. `iwtc-backend-new`를 신규 서버로 배포하지 않는다.
@@ -148,6 +148,9 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 - 소유자 전용 유튜브 후보 일괄 내부 저장 서비스
 - 같은 월드컵 후보 생성의 `sortOrder` 동시성 충돌 방지
 - 소유자 전용 후보 일괄 생성 POST 컨트롤러
+- 유튜브 후보 수정 요청 DTO와 입력 검증
+- 소유자 전용 후보·유튜브 미디어 트랜잭션 수정 서비스
+- 소유자 전용 후보 수정 PUT 컨트롤러
 - 새 PostgreSQL 회원가입과 Argon2id 비밀번호 해시
 - 로그인, 내 회원 정보 조회, 세션 단위 로그아웃
 - HttpOnly refresh token 쿠키와 일회성 rotation
@@ -178,6 +181,7 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 | POST   | `/api/me/game-manage/world-cups`                              | 완료 |
 | GET    | `/api/me/game-contents-manage/world-cups/{worldCupId}/manage-contents` | 완료 |
 | POST   | `/api/me/game-contents-manage/world-cups/{worldCupId}/contents` | 완료 |
+| PUT    | `/api/me/game-contents-manage/world-cups/{worldCupId}/contents/{contentsId}` | 완료 |
 
 개발용 seed는 공개 월드컵 1개와 `후보 A`부터 `후보 D`까지 총 4개 후보를 만든다. 후보 ID는 실행 환경에 따라 달라질 수 있으므로 코드에서 특정 ID를 전제로 사용하지 않는다.
 
@@ -198,6 +202,8 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 유튜브 후보 배열을 저장하는 내부 서비스도 구현되어 있다. 로그인 회원의 월드컵 소유권을 먼저 확인하고 요청에 포함된 모든 `MediaFile`과 `Candidate`를 하나의 트랜잭션에서 순서대로 생성한다. 후보 순서는 기존 마지막 `sortOrder` 다음 값부터 요청 배열 순서대로 연속해서 부여하며, 후보가 없으면 0부터 시작한다. 중간 저장이 실패하면 트랜잭션 전체가 실패하므로 해당 요청에서 생성하던 데이터가 함께 롤백된다. 같은 월드컵의 동시 요청은 PostgreSQL 트랜잭션 범위 advisory lock으로 직렬화한 뒤 마지막 순번을 조회하므로 `sortOrder` 고유 제약 충돌을 막는다. 서로 다른 월드컵은 서로 다른 잠금 키를 사용한다.
 
 후보 일괄 생성 POST 컨트롤러는 기존 인증 가드에서 로그인 회원 ID를 받고, 검증된 요청 DTO의 `data` 배열을 내부 일괄 저장 서비스에 전달한다. 기존 프론트 호환을 위해 성공 시 HTTP 201과 `게임 생성`, `data: null` 응답을 사용한다. API 통합 테스트에서 유효한 로그인 요청 201, 미인증 요청 401, 빈 후보 배열 400, 다른 회원 월드컵 요청 404와 중첩 문자열 정규화를 확인했다.
+
+후보 수정 요청 DTO는 기존 프론트 PUT 요청과 호환되는 `contentsName`, `originalName`, `mediaData`, `detailFileType`, `videoStartTime`, `videoPlayDuration`, `visibleType`을 받는다. 후보명과 문자열을 정규화하고 HTTPS YouTube watch 주소, 5자리 시작 시간, 3–5초 정수 재생 시간, `YOU_TUBE_URL`, `PUBLIC` 또는 `PRIVATE`만 허용하며 알 수 없는 필드는 거부한다. 수정 서비스는 월드컵 소유권과 후보 소속, 연결 미디어를 확인한 뒤 하나의 트랜잭션에서 후보와 YouTube 미디어를 함께 갱신한다. PUT API는 성공 시 HTTP 204를 반환하며 미인증·잘못된 입력·다른 회원 월드컵·다른 월드컵 후보를 자동화 테스트로 검증했다. 프론트의 공개 여부 수정값 전달과 수정 직후 미디어 캐시 무효화도 보정되어 있다.
 
 프론트 후보 입력 검증도 현재 백엔드의 유튜브 전용 생성 범위와 맞췄다. 신규 정적 이미지 후보는 서버로 전송하기 전에 차단하고 지원 전이라는 안내를 반환한다. 영상 후보는 HTTPS `youtube.com/watch?v=` 주소와 허용 호스트, 5자리 시작 시간, 3–5초의 정수 재생 시간을 검사한다. 기존 정적 파일 요청 변환 코드는 과거 데이터 호환을 위해 유지했다.
 
@@ -253,7 +259,7 @@ npm run test:e2e
 npm run build
 ```
 
-마지막 작업 기준으로 린트, 빌드, 단위 테스트 84개가 통과했다. API 통합 테스트는 후보 일괄 생성의 201·401·400·404 경우를 포함해 45개가 통과했다.
+마지막 작업 기준으로 린트와 빌드, 단위 테스트 113개가 통과했다. API 통합 테스트는 후보 수정의 204·401·400·404 경우를 포함해 50개가 통과했다. 검증 명령은 프로젝트 기준 Node.js 24.19에서 실행해야 한다.
 
 프론트엔드:
 
@@ -276,7 +282,7 @@ npm test
 
 ## 11. 다음 작업
 
-YouTube 후보 생성은 백엔드 API와 실제 브라우저 저장·재조회까지 완료되었다. 다음 작업은 후보 수정 API 구현의 첫 단계로 요청 DTO와 검증 규칙만 추가한다. 기존 프론트의 PUT 요청 필드와 현재 YouTube 전용 정책을 기준으로 후보명, 공개 여부, YouTube 주소, 시작 시간, 반복 시간을 검증하고 DTO 단위 테스트를 작성한다. 이 단계에서는 서비스, 컨트롤러, 데이터베이스 저장, 프론트 코드를 수정하지 않는다.
+YouTube 후보 수정 DTO, 서비스, PUT API와 자동화 테스트, 프론트 수정값 전달·미디어 재조회 보정까지 완료되었다. 다음 작업은 실제 로컬 PostgreSQL에서 후보 수정 HTTP 흐름만 확인한다. 검증용 회원·월드컵·YouTube 후보를 만든 뒤 PUT 요청으로 후보명, URL, 시작 시간, 반복 시간, 공개 여부를 변경하고 DB와 관리 목록 API의 값이 모두 갱신되는지 확인한다. 이 단계에서는 백엔드·프론트 코드를 수정하거나 브라우저 검증을 진행하지 않는다. 검증 데이터는 확인 후 모두 삭제한다.
 
 후보 삭제는 게임 결과가 후보를 `NoAction` 외래 키로 참조하므로 현재 상태에서 단순 hard delete가 실패한다. 삭제 API 구현 전 후보 soft delete 필드 추가 또는 과거 게임 결과 처리 정책을 먼저 결정해야 한다. 월드컵 삭제도 같은 이유로 게임 결과를 먼저 처리하지 않으면 실패하므로 별도 단계로 둔다.
 
@@ -291,4 +297,4 @@ YouTube 후보 생성은 백엔드 API와 실제 브라우저 저장·재조회�
 
 새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
 
-> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 이어서 진행해줘. 기존 DB나 회원 데이터는 사용하지 않는다. 다음 단계에서는 후보 수정 API의 요청 DTO와 검증 규칙, DTO 단위 테스트만 구현해줘. 기존 프론트 PUT 요청 필드와 현재 YouTube 전용 후보 정책을 따르고 서비스·컨트롤러·DB 저장·프론트 코드는 아직 수정하지 마.
+> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 이어서 진행해줘. 기존 DB나 회원 데이터는 사용하지 않는다. 다음 단계에서는 코드를 수정하지 말고 실제 로컬 PostgreSQL에서 후보 수정 HTTP 흐름만 검증해줘. 검증용 회원·월드컵·YouTube 후보를 만든 뒤 PUT 요청으로 후보명, URL, 시작 시간, 반복 시간, 공개 여부를 변경하고 DB와 관리 목록 API의 값이 모두 갱신되는지 확인한 다음 검증 데이터를 모두 삭제해줘. 브라우저 검증은 다음 단계로 남겨줘.
