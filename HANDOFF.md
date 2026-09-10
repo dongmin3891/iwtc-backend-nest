@@ -281,14 +281,15 @@ npm test
 
 - `iwtc-backend-new/API_CONTRACT.md`
 - `iwtc-backend-new/BACKEND_MIGRATION_PLAN.md`
+- `iwtc-backend-nest/CANDIDATE_DELETION_POLICY.md`
 
-두 문서의 하단 진행 체크리스트 일부는 현재 구현보다 오래된 상태다. 실제 완료 여부는 이 문서와 신규 NestJS 저장소의 `main` 브랜치를 우선 기준으로 판단한다.
+기존 Spring 참고 문서 두 개의 하단 진행 체크리스트 일부는 현재 구현보다 오래된 상태다. 실제 완료 여부는 이 문서와 신규 NestJS 저장소의 `main` 브랜치를 우선 기준으로 판단한다.
 
 ## 11. 다음 작업
 
-YouTube 후보 수정은 자동화 테스트, 실제 HTTP·PostgreSQL, 브라우저 저장·재접속까지 완료되었다. 다음 작업은 후보 삭제 구현 전에 삭제 정책과 스키마 영향만 검토한다. `GamePlacement`와 `Comment`가 후보를 참조하는 현재 구조에서 과거 게임 결과와 댓글을 보존할지, 후보에 `deletedAt`을 추가하는 soft delete를 사용할지 정하고 공개 게임·관리 목록·랭킹·댓글 조회에서 삭제 후보를 어떻게 처리할지 문서로 정리한다. 이 단계에서는 migration, 백엔드·프론트 코드를 수정하지 않는다.
+후보 삭제 전 관계와 조회 로직 검토를 완료했고 결정 사항을 `CANDIDATE_DELETION_POLICY.md`에 정리했다. 후보는 `Candidate.deletedAt` 기반 소프트 삭제를 사용하고 과거 `GamePlacement`, `Comment`, 연결 미디어를 보존한다. 삭제 후보는 공개 게임, 새 결과 제출, 공개 랭킹, 관리 목록, 수정, 새 댓글 작성에서 제외한다. 월드컵 댓글 목록과 이미 저장된 `playId` 결과 재요청은 기록 보존을 위해 유지한다.
 
-후보 삭제는 게임 결과가 후보를 `NoAction` 외래 키로 참조하므로 현재 상태에서 단순 hard delete가 실패한다. 삭제 API 구현 전 후보 soft delete 필드 추가 또는 과거 게임 결과 처리 정책을 먼저 결정해야 한다. 월드컵 삭제도 같은 이유로 게임 결과를 먼저 처리하지 않으면 실패하므로 별도 단계로 둔다.
+다음 한 단계에서는 Prisma 스키마와 migration만 변경한다. `Candidate.deletedAt`과 활성 후보 조회 인덱스를 추가하고, 후보 물리 삭제 시 댓글이 함께 사라지지 않도록 `Comment.candidate` 외래 키를 `NoAction`으로 변경한다. Prisma Client 생성과 migration 검증까지만 수행하며 서비스, 컨트롤러, 프론트엔드 동작은 아직 수정하지 않는다.
 
 그다음 우선순위는 다음과 같다.
 
@@ -301,4 +302,4 @@ YouTube 후보 수정은 자동화 테스트, 실제 HTTP·PostgreSQL, 브라우
 
 새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
 
-> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 이어서 진행해줘. 기존 DB나 회원 데이터는 사용하지 않는다. 다음 단계에서는 후보 삭제 구현 전에 현재 Prisma 관계와 조회 로직을 검토하고 삭제 정책과 스키마 영향만 문서로 정리해줘. 과거 게임 결과·댓글 보존 여부, 후보 soft delete 적용 여부, 공개 게임·관리 목록·랭킹·댓글에서 삭제 후보 처리 방식을 포함하고 migration이나 백엔드·프론트 코드는 아직 수정하지 마.
+> `iwtc-backend-nest/HANDOFF.md`와 `CANDIDATE_DELETION_POLICY.md`를 먼저 읽고 이어서 진행해줘. 기존 DB나 회원 데이터는 사용하지 않는다. 다음 단계에서는 정책 문서의 1단계대로 Prisma 스키마와 migration만 변경해줘. `Candidate.deletedAt`, 활성 후보 조회 인덱스, `Comment.candidate`의 `NoAction` 외래 키를 반영하고 Prisma Client 생성과 migration 검증까지만 진행해. 서비스, 컨트롤러, 프론트엔드 코드는 아직 수정하지 마.
