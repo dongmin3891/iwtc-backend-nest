@@ -268,6 +268,15 @@ describe('WorldCupsService', () => {
         }),
       }),
     );
+    expect(transaction.candidate.findMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: [1, 2, 3, 4] },
+        worldCupId: 1,
+        visibleType: 'PUBLIC',
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
   });
 
   it('rejects game results for an unknown world cup', async () => {
@@ -332,7 +341,7 @@ describe('WorldCupsService', () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it('returns the saved result when the same play is submitted again', async () => {
+  it('returns the saved result without revalidating candidates', async () => {
     const existingPlay = {
       id: '550e8400-e29b-41d4-a716-446655440000',
       worldCupId: 1,

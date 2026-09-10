@@ -243,6 +243,7 @@ export class WorldCupsService {
             id: { in: candidateIds },
             worldCupId,
             visibleType: 'PUBLIC',
+            deletedAt: null,
           },
           select: { id: true },
         });
