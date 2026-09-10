@@ -148,7 +148,7 @@ export class WorldCupsService {
         _count: {
           select: {
             candidates: {
-              where: { visibleType: 'PUBLIC' },
+              where: { visibleType: 'PUBLIC', deletedAt: null },
             },
           },
         },
@@ -173,6 +173,7 @@ export class WorldCupsService {
       where: {
         worldCupId,
         visibleType: 'PUBLIC',
+        deletedAt: null,
         ...(query.excludeContentsIds.length > 0
           ? { id: { notIn: query.excludeContentsIds } }
           : {}),

@@ -87,14 +87,15 @@ describe('WorldCupsService', () => {
       { id: 3, name: '후보 C', mediaFileId: null },
       { id: 4, name: '후보 D', mediaFileId: null },
     ];
+    const findFirst = vi.fn().mockResolvedValue({
+      id: 1,
+      title: '첫 번째 월드컵',
+      _count: { candidates: 4 },
+    });
     const findMany = vi.fn().mockResolvedValue(candidates);
     const prisma = {
       worldCup: {
-        findFirst: vi.fn().mockResolvedValue({
-          id: 1,
-          title: '첫 번째 월드컵',
-          _count: { candidates: 4 },
-        }),
+        findFirst,
       },
       candidate: { findMany },
     } as unknown as PrismaService;
@@ -114,6 +115,28 @@ describe('WorldCupsService', () => {
     expect(
       result.contentsList.map(({ contentsId }) => contentsId).sort(),
     ).toEqual([1, 2, 3, 4]);
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          _count: {
+            select: {
+              candidates: {
+                where: { visibleType: 'PUBLIC', deletedAt: null },
+              },
+            },
+          },
+        }),
+      }),
+    );
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          worldCupId: 1,
+          visibleType: 'PUBLIC',
+          deletedAt: null,
+        },
+      }),
+    );
   });
 
   it('excludes eliminated candidates when loading the next round', async () => {
@@ -141,7 +164,10 @@ describe('WorldCupsService', () => {
 
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ id: { notIn: [2, 4] } }),
+        where: expect.objectContaining({
+          deletedAt: null,
+          id: { notIn: [2, 4] },
+        }),
       }),
     );
     expect(
