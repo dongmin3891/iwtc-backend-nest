@@ -151,6 +151,8 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 - 유튜브 후보 수정 요청 DTO와 입력 검증
 - 소유자 전용 후보·유튜브 미디어 트랜잭션 수정 서비스
 - 소유자 전용 후보 수정 PUT 컨트롤러
+- 후보 소프트 삭제용 `Candidate.deletedAt` 스키마와 migration
+- 후보 물리 삭제로 댓글이 사라지지 않게 보호하는 외래 키
 - 새 PostgreSQL 회원가입과 Argon2id 비밀번호 해시
 - 로그인, 내 회원 정보 조회, 세션 단위 로그아웃
 - HttpOnly refresh token 쿠키와 일회성 rotation
@@ -252,6 +254,8 @@ YouTube 후보 1개의 실제 브라우저 저장 흐름도 확인했다. 새 �
 
 후보 수정의 실제 브라우저 흐름도 확인했다. 저장된 비공개 YouTube 후보의 수정 화면에서 후보명, 다른 실제 YouTube URL, 시작 시간 `00120`, 반복 시간 `5`, 공개 상태를 적용하자 수정 대기 건수가 1개로 표시되었다. `변경사항 적용` 후 성공 안내와 수정 대기 0개를 확인했고, 관리 화면을 새로고침한 뒤에도 모든 수정값과 새 YouTube 영상이 유지되었다. PostgreSQL에도 같은 값이 저장되었으며 검증용 회원·세션·월드컵·후보·미디어는 모두 삭제 후 0건인 것을 확인했다. 브라우저 로그에는 기존 favicon 404와 YouTube 로그 요청의 로컬 네트워크 오류만 있었고 애플리케이션 수정 오류는 없었다.
 
+후보 삭제 정책의 첫 구현 단계로 `Candidate.deletedAt`과 `(world_cup_id, deleted_at, visible_type)` 인덱스를 추가하고 기존 후보 공개 인덱스를 대체했다. `Comment.candidate` 외래 키는 `Cascade`에서 `NoAction`으로 변경했고 `GamePlacement.candidate`의 `NoAction`은 유지했다. migration을 실제 로컬 PostgreSQL에 적용한 뒤 컬럼·인덱스·외래 키를 직접 확인했으며 기존 후보 4개는 모두 `deletedAt: null`로 보존되었다. Prisma 스키마 검증과 Client 생성, migration 상태 확인, 린트, 단위 테스트 113개, 빌드가 통과했다. 서비스와 API의 삭제 후보 필터는 아직 추가하지 않았다.
+
 ## 9. 검증 명령
 
 백엔드:
@@ -289,7 +293,7 @@ npm test
 
 후보 삭제 전 관계와 조회 로직 검토를 완료했고 결정 사항을 `CANDIDATE_DELETION_POLICY.md`에 정리했다. 후보는 `Candidate.deletedAt` 기반 소프트 삭제를 사용하고 과거 `GamePlacement`, `Comment`, 연결 미디어를 보존한다. 삭제 후보는 공개 게임, 새 결과 제출, 공개 랭킹, 관리 목록, 수정, 새 댓글 작성에서 제외한다. 월드컵 댓글 목록과 이미 저장된 `playId` 결과 재요청은 기록 보존을 위해 유지한다.
 
-다음 한 단계에서는 Prisma 스키마와 migration만 변경한다. `Candidate.deletedAt`과 활성 후보 조회 인덱스를 추가하고, 후보 물리 삭제 시 댓글이 함께 사라지지 않도록 `Comment.candidate` 외래 키를 `NoAction`으로 변경한다. Prisma Client 생성과 migration 검증까지만 수행하며 서비스, 컨트롤러, 프론트엔드 동작은 아직 수정하지 않는다.
+Prisma 스키마와 migration 단계는 완료되었다. 다음 한 단계에서는 `WorldCupsService.findAll`의 공개 월드컵 미리보기 후보와 `findAvailableRounds`의 후보 수 계산에만 `deletedAt: null` 조건을 추가하고 해당 단위 테스트를 보강한다. 게임 대진 조회, 결과 저장, 랭킹, 관리, 댓글, 삭제 API와 프론트엔드는 아직 수정하지 않는다.
 
 그다음 우선순위는 다음과 같다.
 
@@ -302,4 +306,4 @@ npm test
 
 새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
 
-> `iwtc-backend-nest/HANDOFF.md`와 `CANDIDATE_DELETION_POLICY.md`를 먼저 읽고 이어서 진행해줘. 기존 DB나 회원 데이터는 사용하지 않는다. 다음 단계에서는 정책 문서의 1단계대로 Prisma 스키마와 migration만 변경해줘. `Candidate.deletedAt`, 활성 후보 조회 인덱스, `Comment.candidate`의 `NoAction` 외래 키를 반영하고 Prisma Client 생성과 migration 검증까지만 진행해. 서비스, 컨트롤러, 프론트엔드 코드는 아직 수정하지 마.
+> `iwtc-backend-nest/HANDOFF.md`와 `CANDIDATE_DELETION_POLICY.md`를 먼저 읽고 이어서 진행해줘. 기존 DB나 회원 데이터는 사용하지 않는다. 다음 단계에서는 `WorldCupsService.findAll`의 공개 월드컵 미리보기 후보와 `findAvailableRounds`의 후보 수 계산에만 `deletedAt: null` 조건을 추가하고 단위 테스트를 보강해줘. 게임 대진 조회, 결과 저장, 랭킹, 관리, 댓글, 삭제 API와 프론트엔드는 아직 수정하지 마.

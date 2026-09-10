@@ -53,6 +53,7 @@ model Candidate {
   mediaFileId Int?            @map("media_file_id")
   visibleType VisibilityType  @default(PUBLIC) @map("visible_type")
   sortOrder   Int             @default(0) @map("sort_order")
+  deletedAt   DateTime?       @map("deleted_at") @db.Timestamptz(3)
   createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
   worldCup    WorldCup        @relation(fields: [worldCupId], references: [id], onDelete: Cascade)
@@ -61,7 +62,7 @@ model Candidate {
   comments    Comment[]
 
   @@unique([worldCupId, sortOrder])
-  @@index([worldCupId, visibleType])
+  @@index([worldCupId, deletedAt, visibleType])
   @@map("candidates")
 }
 
@@ -121,7 +122,7 @@ model Comment {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
   worldCup    WorldCup  @relation(fields: [worldCupId], references: [id], onDelete: Cascade)
-  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: NoAction)
   member      Member?   @relation(fields: [memberId], references: [id], onDelete: SetNull)
 
   @@index([worldCupId, deletedAt, createdAt, id])
