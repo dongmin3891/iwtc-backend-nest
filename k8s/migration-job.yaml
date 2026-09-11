@@ -18,7 +18,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: migration
-          image: ghcr.io/dongmin3891/iwtc-backend-nest:latest
+          image: ghcr.io/dongmin3891/iwtc-backend-nest:65bd794821eedd38504a774eed2253fa4234e7ce
           imagePullPolicy: Always
           command:
             - npm
