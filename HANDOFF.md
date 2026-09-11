@@ -19,8 +19,8 @@
 
 | 용도               | 저장소                                                 | 기준 브랜치                 | 기능 기준 커밋 |
 | ------------------ | ------------------------------------------------------ | --------------------------- | -------------- |
-| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `f3725e7`      |
-| 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `a5032d7`      |
+| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `c03a33d`      |
+| 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `99be22b`      |
 | 기존 Spring 참고용 | `https://github.com/dongmin3891/iwtc-backend-new.git`  | `codex/nest-migration-plan` | `3703d2d`      |
 
 신규 개발 코드는 `iwtc-backend-nest`에 작성한다. `iwtc-backend-new`를 신규 서버로 배포하지 않는다.
@@ -316,7 +316,7 @@ npm run build
 
 ## 11. 다음 작업
 
-후보 생성·수정·삭제와 실제 S3 호환 이미지 업로드까지 완료되었다. `ddongmy-os`의 GitOps 흐름을 따르는 백엔드 배포 기반도 구현했다. GitHub Actions가 검증, GHCR 이미지 push, Deployment와 migration Job의 SHA 태그 갱신, bot commit까지 성공했으며 최신 배포 커밋은 `f3725e7`이다.
+후보 생성·수정·삭제와 실제 S3 호환 이미지 업로드까지 완료되었다. `ddongmy-os`의 GitOps 흐름을 따르는 백엔드와 프론트엔드 배포 기반도 구현했다. 양쪽 GitHub Actions에서 검증, GHCR 이미지 push, Deployment의 SHA 태그 갱신, bot commit까지 성공했다. 프론트는 standalone Docker 컨테이너의 `/api/health` 응답도 실제로 확인했다.
 
 확정된 운영 구조는 다음과 같다.
 
@@ -346,14 +346,12 @@ K3s / namespace: iwtc
 
 다음 순서는 다음과 같다.
 
-1. GitHub Packages 화면에서 새 `iwtc-backend-nest` 컨테이너 패키지가 Public인지 확인한다. 현재 로컬 GitHub CLI 토큰은 `read:packages` 권한이 없어 API 확인을 할 수 없었다.
-2. 프론트엔드 저장소에 프로덕션 Dockerfile, Kubernetes Deployment·Service·Ingress, GitHub Actions, Argo CD Application을 추가한다.
-3. 프론트 빌드 환경을 `https://api.iwtc.ddongmy.com/`으로 바꾸고 프론트 GHCR 이미지 생성까지 확인한다.
-4. 홈서버에서 `k8s/README.md`의 안내대로 `iwtc-secrets`를 생성한다. 실제 Secret 값은 Git이나 HANDOFF에 기록하지 않는다.
-5. 홈서버에서 백엔드와 프론트 Argo CD Application을 차례로 등록한다.
-6. PostgreSQL·MinIO PVC, 인증서, migration Job, API와 프론트 Pod가 Ready인지 확인한다.
-7. 배포된 주소에서 회원가입·로그인·게임·이미지 업로드를 검증한다.
-8. 안정화 후 PostgreSQL `pg_dump`와 MinIO 객체를 Cloudflare R2 같은 외부 저장소로 보내는 CronJob, 보존 정책, 실제 복구 테스트를 추가한다.
+1. GitHub Packages 화면에서 새 `iwtc-frontend-new` 컨테이너 패키지도 Public으로 변경한다.
+2. 홈서버에서 백엔드 `k8s/README.md`의 안내대로 `iwtc-secrets`를 생성한다. 실제 Secret 값은 Git이나 HANDOFF에 기록하지 않는다.
+3. 홈서버에서 백엔드와 프론트 Argo CD Application을 차례로 등록한다.
+4. PostgreSQL·MinIO PVC, 인증서, migration Job, API와 프론트 Pod가 Ready인지 확인한다.
+5. 배포된 주소에서 회원가입·로그인·게임·이미지 업로드를 검증한다.
+6. 안정화 후 PostgreSQL `pg_dump`와 MinIO 객체를 Cloudflare R2 같은 외부 저장소로 보내는 CronJob, 보존 정책, 실제 복구 테스트를 추가한다.
 
 현재 로컬 Mac에는 Kubernetes current context가 설정되어 있지 않아 클러스터 상태를 직접 조회하지 못했다. 실제 배포 적용과 검증은 홈서버 kubeconfig를 연결하거나 홈서버에서 명령을 실행해야 한다.
 
@@ -361,4 +359,4 @@ K3s / namespace: iwtc
 
 새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
 
-> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 이어서 진행해줘. 기존 운영 DB나 회원 데이터는 사용하지 않는다. 백엔드 K3s·PostgreSQL·MinIO·GitHub Actions·Argo CD 배포 기반은 완료되었다. 다음 단계에서는 프론트엔드 저장소에 Dockerfile, Kubernetes, GitHub Actions, Argo CD 구성을 추가하고 `https://api.iwtc.ddongmy.com/`을 사용하도록 배포 환경을 연결해줘. 운영 Secret 값과 기존 `iwtc.code-workspace`는 커밋하지 마.
+> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 이어서 진행해줘. 기존 운영 DB나 회원 데이터는 사용하지 않는다. 백엔드와 프론트의 K3s·PostgreSQL·MinIO·GitHub Actions·Argo CD 배포 파일 및 GHCR 이미지 생성은 완료되었다. 다음 단계에서는 사용자가 홈서버에 `iwtc-secrets`를 생성하고 두 Argo CD Application을 등록할 수 있도록 안내한 뒤 실제 배포 상태와 브라우저 흐름을 검증해줘. 운영 Secret 값과 기존 `iwtc.code-workspace`는 커밋하지 마.
