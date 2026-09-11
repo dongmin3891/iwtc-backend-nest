@@ -107,6 +107,51 @@ export class ManageWorldCupContentsController {
     return success('이미지 후보 생성', candidateId);
   }
 
+  @Put(':worldCupId/contents/:contentsId/static')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: MAX_STATIC_IMAGE_SIZE } }),
+  )
+  @ApiOperation({ summary: '내 월드컵 이미지 후보 수정' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['contentsName', 'visibleType'],
+      properties: {
+        contentsName: { type: 'string', minLength: 1, maxLength: 100 },
+        visibleType: { type: 'string', enum: ['PUBLIC', 'PRIVATE'] },
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: '이미지를 교체할 때만 전송',
+        },
+      },
+    },
+  })
+  @ApiNoContentResponse({ description: '이미지 후보 수정 성공' })
+  @ApiBadRequestResponse({
+    description: '후보 또는 이미지 파일이 올바르지 않음',
+  })
+  @ApiNotFoundResponse({
+    description: '소유한 월드컵, 활성 이미지 후보 또는 미디어를 찾을 수 없음',
+  })
+  async updateStatic(
+    @Param('worldCupId', ParseIntPipe) worldCupId: number,
+    @Param('contentsId', ParseIntPipe) contentsId: number,
+    @Body() body: CreateStaticWorldCupContentDto,
+    @UploadedFile() file: UploadedStaticImage | undefined,
+    @Req() request: Request & AuthenticatedRequest,
+  ): Promise<void> {
+    await this.manageWorldCupContentsService.updateStaticImage(
+      request.member.id,
+      worldCupId,
+      contentsId,
+      body,
+      file,
+    );
+  }
+
   @Put(':worldCupId/contents/:contentsId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: '내 월드컵 후보 수정' })

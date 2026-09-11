@@ -99,6 +99,129 @@ export class ManageWorldCupContentsService {
     }
   }
 
+  async updateStaticImage(
+    memberId: number,
+    worldCupId: number,
+    contentsId: number,
+    request: CreateStaticWorldCupContentDto,
+    file?: UploadedStaticImage,
+  ): Promise<number> {
+    const currentCandidate = await this.prisma.candidate.findFirst({
+      where: {
+        id: contentsId,
+        worldCupId,
+        deletedAt: null,
+        worldCup: { ownerId: memberId },
+      },
+      select: {
+        id: true,
+        mediaFile: {
+          select: { id: true, fileType: true, objectKey: true },
+        },
+      },
+    });
+    if (
+      !currentCandidate?.mediaFile ||
+      currentCandidate.mediaFile.fileType !== 'STATIC_MEDIA_FILE'
+    ) {
+      throw new NotFoundException('이미지 후보를 찾을 수 없습니다.');
+    }
+
+    const image = file ? validateStaticImage(file) : undefined;
+    const newObjectKey = image
+      ? `world-cups/${worldCupId}/candidates/${randomUUID()}.${image.extension}`
+      : undefined;
+    if (file && newObjectKey) {
+      await this.objectStorage.putObject({
+        key: newObjectKey,
+        body: file.buffer,
+        contentType: file.mimetype,
+      });
+    }
+
+    try {
+      const candidateId = await this.prisma.$transaction(
+        async (transaction) => {
+          const candidate = await transaction.candidate.findFirst({
+            where: {
+              id: contentsId,
+              worldCupId,
+              deletedAt: null,
+              worldCup: { ownerId: memberId },
+            },
+            select: {
+              id: true,
+              mediaFile: { select: { id: true, fileType: true } },
+            },
+          });
+          if (
+            !candidate?.mediaFile ||
+            candidate.mediaFile.fileType !== 'STATIC_MEDIA_FILE'
+          ) {
+            throw new NotFoundException('이미지 후보를 찾을 수 없습니다.');
+          }
+
+          if (file && image && newObjectKey) {
+            await transaction.mediaFile.update({
+              where: { id: candidate.mediaFile.id },
+              data: {
+                fileType: 'STATIC_MEDIA_FILE',
+                detailType: image.detailType,
+                objectKey: newObjectKey,
+                thumbnailObjectKey: null,
+                externalUrl: null,
+                originalName: file.originalname,
+                videoStartTime: null,
+                videoPlayDuration: null,
+              },
+            });
+          }
+
+          await transaction.candidate.update({
+            where: { id: candidate.id },
+            data: {
+              name: request.contentsName,
+              visibleType: request.visibleType,
+            },
+          });
+
+          return candidate.id;
+        },
+      );
+
+      if (newObjectKey && currentCandidate.mediaFile.objectKey) {
+        try {
+          await this.objectStorage.deleteObject(
+            currentCandidate.mediaFile.objectKey,
+          );
+        } catch (cleanupError) {
+          this.logObjectCleanupFailure(
+            currentCandidate.mediaFile.objectKey,
+            cleanupError,
+          );
+        }
+      }
+
+      return candidateId;
+    } catch (error) {
+      if (newObjectKey) {
+        try {
+          await this.objectStorage.deleteObject(newObjectKey);
+        } catch (cleanupError) {
+          this.logObjectCleanupFailure(newObjectKey, cleanupError);
+        }
+      }
+      throw error;
+    }
+  }
+
+  private logObjectCleanupFailure(objectKey: string, error: unknown): void {
+    this.logger.error(
+      `Failed to remove orphaned object ${objectKey}`,
+      error instanceof Error ? error.stack : undefined,
+    );
+  }
+
   async createOne(
     memberId: number,
     worldCupId: number,

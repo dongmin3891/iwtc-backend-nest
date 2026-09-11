@@ -35,6 +35,161 @@ function youtubeCandidateUpdate(): UpdateWorldCupContentsDto {
 }
 
 describe('ManageWorldCupContentsService', () => {
+  it('updates static candidate fields without replacing its image', async () => {
+    const currentCandidate = {
+      id: 15,
+      mediaFile: {
+        id: 25,
+        fileType: 'STATIC_MEDIA_FILE',
+        objectKey: 'world-cups/3/candidates/old.png',
+      },
+    };
+    const transaction = {
+      candidate: {
+        findFirst: vi.fn().mockResolvedValue(currentCandidate),
+        update: vi.fn().mockResolvedValue({ id: 15 }),
+      },
+      mediaFile: { update: vi.fn() },
+    };
+    const prisma = {
+      candidate: { findFirst: vi.fn().mockResolvedValue(currentCandidate) },
+      $transaction: vi.fn(
+        (operation: (client: typeof transaction) => Promise<number>) =>
+          operation(transaction),
+      ),
+    } as unknown as PrismaService;
+    const objectStorage = {
+      putObject: vi.fn(),
+      deleteObject: vi.fn(),
+    } as unknown as ObjectStorageService;
+    const service = new ManageWorldCupContentsService(prisma, objectStorage);
+
+    await expect(
+      service.updateStaticImage(7, 3, 15, {
+        contentsName: '수정 이미지 후보',
+        visibleType: 'PRIVATE',
+      }),
+    ).resolves.toBe(15);
+
+    expect(transaction.candidate.update).toHaveBeenCalledWith({
+      where: { id: 15 },
+      data: { name: '수정 이미지 후보', visibleType: 'PRIVATE' },
+    });
+    expect(transaction.mediaFile.update).not.toHaveBeenCalled();
+    expect(objectStorage.putObject).not.toHaveBeenCalled();
+    expect(objectStorage.deleteObject).not.toHaveBeenCalled();
+  });
+
+  it('replaces a static candidate image and removes the previous object', async () => {
+    const currentCandidate = {
+      id: 15,
+      mediaFile: {
+        id: 25,
+        fileType: 'STATIC_MEDIA_FILE',
+        objectKey: 'world-cups/3/candidates/old.png',
+      },
+    };
+    const transaction = {
+      candidate: {
+        findFirst: vi.fn().mockResolvedValue(currentCandidate),
+        update: vi.fn().mockResolvedValue({ id: 15 }),
+      },
+      mediaFile: { update: vi.fn().mockResolvedValue({ id: 25 }) },
+    };
+    const prisma = {
+      candidate: { findFirst: vi.fn().mockResolvedValue(currentCandidate) },
+      $transaction: vi.fn(
+        (operation: (client: typeof transaction) => Promise<number>) =>
+          operation(transaction),
+      ),
+    } as unknown as PrismaService;
+    const objectStorage = {
+      putObject: vi.fn().mockResolvedValue(undefined),
+      deleteObject: vi.fn().mockResolvedValue(undefined),
+    } as unknown as ObjectStorageService;
+    const service = new ManageWorldCupContentsService(prisma, objectStorage);
+    const file = {
+      buffer: Buffer.from('GIF89a'),
+      mimetype: 'image/gif',
+      originalname: 'new.gif',
+      size: 6,
+    };
+
+    await service.updateStaticImage(
+      7,
+      3,
+      15,
+      { contentsName: '교체 후보', visibleType: 'PUBLIC' },
+      file,
+    );
+
+    const newObjectKey = vi.mocked(objectStorage.putObject).mock.calls[0]![0]
+      .key;
+    expect(newObjectKey).toMatch(
+      /^world-cups\/3\/candidates\/[0-9a-f-]+\.gif$/,
+    );
+    expect(transaction.mediaFile.update).toHaveBeenCalledWith({
+      where: { id: 25 },
+      data: {
+        fileType: 'STATIC_MEDIA_FILE',
+        detailType: 'GIF',
+        objectKey: newObjectKey,
+        thumbnailObjectKey: null,
+        externalUrl: null,
+        originalName: 'new.gif',
+        videoStartTime: null,
+        videoPlayDuration: null,
+      },
+    });
+    expect(objectStorage.deleteObject).toHaveBeenCalledWith(
+      'world-cups/3/candidates/old.png',
+    );
+  });
+
+  it('removes the replacement image when the static update transaction fails', async () => {
+    const databaseError = new Error('database unavailable');
+    const prisma = {
+      candidate: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 15,
+          mediaFile: {
+            id: 25,
+            fileType: 'STATIC_MEDIA_FILE',
+            objectKey: 'world-cups/3/candidates/old.png',
+          },
+        }),
+      },
+      $transaction: vi.fn().mockRejectedValue(databaseError),
+    } as unknown as PrismaService;
+    const objectStorage = {
+      putObject: vi.fn().mockResolvedValue(undefined),
+      deleteObject: vi.fn().mockResolvedValue(undefined),
+    } as unknown as ObjectStorageService;
+    const service = new ManageWorldCupContentsService(prisma, objectStorage);
+
+    await expect(
+      service.updateStaticImage(
+        7,
+        3,
+        15,
+        { contentsName: '교체 후보', visibleType: 'PUBLIC' },
+        {
+          buffer: Buffer.from('GIF89a'),
+          mimetype: 'image/gif',
+          originalname: 'new.gif',
+          size: 6,
+        },
+      ),
+    ).rejects.toBe(databaseError);
+
+    const newObjectKey = vi.mocked(objectStorage.putObject).mock.calls[0]![0]
+      .key;
+    expect(objectStorage.deleteObject).toHaveBeenCalledWith(newObjectKey);
+    expect(objectStorage.deleteObject).not.toHaveBeenCalledWith(
+      'world-cups/3/candidates/old.png',
+    );
+  });
+
   it('uploads and stores a static image candidate with the next sort order', async () => {
     const transaction = {
       $queryRaw: vi.fn().mockResolvedValue([{ locked: true }]),

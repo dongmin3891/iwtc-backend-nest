@@ -84,6 +84,7 @@ describe('Manage world cups API (e2e)', () => {
   const manageWorldCupContentsService = {
     createMany: vi.fn().mockResolvedValue([51, 52]),
     createStaticImage: vi.fn().mockResolvedValue(53),
+    updateStaticImage: vi.fn().mockResolvedValue(31),
     updateOne: vi.fn().mockResolvedValue(31),
     remove: vi.fn().mockResolvedValue(undefined),
     findAll: vi.fn().mockResolvedValue([
@@ -250,6 +251,33 @@ describe('Manage world cups API (e2e)', () => {
     expect(
       manageWorldCupContentsService.createStaticImage,
     ).not.toHaveBeenCalled();
+  });
+
+  it('updates a static candidate with an optional replacement image', async () => {
+    await request(app.getHttpServer())
+      .put('/api/me/game-contents-manage/world-cups/3/contents/31/static')
+      .set('access-token', 'valid-token')
+      .field('contentsName', '  수정 이미지 후보  ')
+      .field('visibleType', 'PUBLIC')
+      .attach('file', png, {
+        filename: 'replacement.png',
+        contentType: 'image/png',
+      })
+      .expect(204);
+
+    expect(
+      manageWorldCupContentsService.updateStaticImage,
+    ).toHaveBeenCalledWith(
+      7,
+      3,
+      31,
+      { contentsName: '수정 이미지 후보', visibleType: 'PUBLIC' },
+      expect.objectContaining({
+        buffer: png,
+        mimetype: 'image/png',
+        originalname: 'replacement.png',
+      }),
+    );
   });
 
   it('returns management contents for an owned world cup', async () => {

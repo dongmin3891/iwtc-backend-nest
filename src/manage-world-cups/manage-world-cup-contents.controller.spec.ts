@@ -57,6 +57,28 @@ function updateRequest(): UpdateWorldCupContentsDto {
 }
 
 describe('ManageWorldCupContentsController', () => {
+  it('passes an optional replacement file to the static update service', async () => {
+    const updateStaticImage = vi.fn().mockResolvedValue(15);
+    const controller = new ManageWorldCupContentsController({
+      updateStaticImage,
+    } as unknown as ManageWorldCupContentsService);
+    const body = {
+      contentsName: '수정 이미지 후보',
+      visibleType: 'PRIVATE',
+    } as const;
+    const file = {
+      buffer: Buffer.from('GIF89a'),
+      mimetype: 'image/gif',
+      originalname: 'replacement.gif',
+      size: 6,
+    };
+
+    await expect(
+      controller.updateStatic(3, 15, body, file, authenticatedRequest()),
+    ).resolves.toBeUndefined();
+    expect(updateStaticImage).toHaveBeenCalledWith(7, 3, 15, body, file);
+  });
+
   it('returns the created static image candidate id', async () => {
     const createStaticImage = vi.fn().mockResolvedValue(15);
     const controller = new ManageWorldCupContentsController({
