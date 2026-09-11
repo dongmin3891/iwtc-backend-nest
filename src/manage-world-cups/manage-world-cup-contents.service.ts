@@ -163,7 +163,7 @@ export class ManageWorldCupContentsService {
     }
 
     const candidates = await this.prisma.candidate.findMany({
-      where: { worldCupId },
+      where: { worldCupId, deletedAt: null },
       orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
       select: {
         id: true,

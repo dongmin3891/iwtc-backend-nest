@@ -405,7 +405,7 @@ describe('ManageWorldCupContentsService', () => {
     expect(transaction.candidate.update).not.toHaveBeenCalled();
   });
 
-  it('returns owned contents in management order with derived scores and ranks', async () => {
+  it('returns active owned contents in management order with derived scores and ranks', async () => {
     const findFirst = vi.fn().mockResolvedValue({ id: 3 });
     const findMany = vi.fn().mockResolvedValue([
       {
@@ -470,7 +470,7 @@ describe('ManageWorldCupContentsService', () => {
       select: { id: true },
     });
     expect(findMany).toHaveBeenCalledWith({
-      where: { worldCupId: 3 },
+      where: { worldCupId: 3, deletedAt: null },
       orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
       select: {
         id: true,
