@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -76,6 +77,25 @@ export class ManageWorldCupContentsController {
       worldCupId,
       contentsId,
       body,
+    );
+  }
+
+  @Delete(':worldCupId/contents/:contentsId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: '내 월드컵 후보 삭제' })
+  @ApiNoContentResponse({ description: '후보 삭제 성공' })
+  @ApiNotFoundResponse({
+    description: '소유한 월드컵 또는 활성 후보를 찾을 수 없음',
+  })
+  async remove(
+    @Param('worldCupId', ParseIntPipe) worldCupId: number,
+    @Param('contentsId', ParseIntPipe) contentsId: number,
+    @Req() request: Request & AuthenticatedRequest,
+  ): Promise<void> {
+    await this.manageWorldCupContentsService.remove(
+      request.member.id,
+      worldCupId,
+      contentsId,
     );
   }
 

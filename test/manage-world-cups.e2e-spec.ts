@@ -84,6 +84,7 @@ describe('Manage world cups API (e2e)', () => {
   const manageWorldCupContentsService = {
     createMany: vi.fn().mockResolvedValue([51, 52]),
     updateOne: vi.fn().mockResolvedValue(31),
+    remove: vi.fn().mockResolvedValue(undefined),
     findAll: vi.fn().mockResolvedValue([
       {
         contentsId: 31,
@@ -407,6 +408,68 @@ describe('Manage world cups API (e2e)', () => {
       3,
       999,
       expect.any(Object),
+    );
+  });
+
+  it('deletes an active candidate from an owned world cup', async () => {
+    await request(app.getHttpServer())
+      .delete('/api/me/game-contents-manage/world-cups/3/contents/31')
+      .set('access-token', 'valid-token')
+      .expect(204);
+
+    expect(manageWorldCupContentsService.remove).toHaveBeenCalledWith(7, 3, 31);
+  });
+
+  it('requires authentication before deleting a candidate', async () => {
+    await request(app.getHttpServer())
+      .delete('/api/me/game-contents-manage/world-cups/3/contents/31')
+      .expect(401)
+      .expect({ code: -1, message: '로그인이 필요합니다.', data: null });
+
+    expect(manageWorldCupContentsService.remove).not.toHaveBeenCalled();
+  });
+
+  it('does not reveal another member world cup while deleting a candidate', async () => {
+    manageWorldCupContentsService.remove.mockRejectedValueOnce(
+      new NotFoundException('월드컵을 찾을 수 없습니다.'),
+    );
+
+    await request(app.getHttpServer())
+      .delete('/api/me/game-contents-manage/world-cups/99/contents/31')
+      .set('access-token', 'valid-token')
+      .expect(404)
+      .expect({
+        code: -1,
+        message: '월드컵을 찾을 수 없습니다.',
+        data: null,
+      });
+
+    expect(manageWorldCupContentsService.remove).toHaveBeenCalledWith(
+      7,
+      99,
+      31,
+    );
+  });
+
+  it('returns not found for a missing or already deleted candidate', async () => {
+    manageWorldCupContentsService.remove.mockRejectedValueOnce(
+      new NotFoundException('월드컵 후보를 찾을 수 없습니다.'),
+    );
+
+    await request(app.getHttpServer())
+      .delete('/api/me/game-contents-manage/world-cups/3/contents/999')
+      .set('access-token', 'valid-token')
+      .expect(404)
+      .expect({
+        code: -1,
+        message: '월드컵 후보를 찾을 수 없습니다.',
+        data: null,
+      });
+
+    expect(manageWorldCupContentsService.remove).toHaveBeenCalledWith(
+      7,
+      3,
+      999,
     );
   });
 

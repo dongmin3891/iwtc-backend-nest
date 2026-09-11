@@ -110,4 +110,28 @@ describe('ManageWorldCupContentsController', () => {
       controller.update(3, 15, updateRequest(), authenticatedRequest()),
     ).rejects.toBe(updateError);
   });
+
+  it('passes the authenticated member and candidate deletion to the service', async () => {
+    const remove = vi.fn().mockResolvedValue(undefined);
+    const controller = new ManageWorldCupContentsController({
+      remove,
+    } as unknown as ManageWorldCupContentsService);
+
+    await expect(
+      controller.remove(3, 15, authenticatedRequest()),
+    ).resolves.toBeUndefined();
+    expect(remove).toHaveBeenCalledWith(7, 3, 15);
+  });
+
+  it('does not complete when candidate deletion fails', async () => {
+    const deleteError = new Error('candidate deletion failed');
+    const remove = vi.fn().mockRejectedValue(deleteError);
+    const controller = new ManageWorldCupContentsController({
+      remove,
+    } as unknown as ManageWorldCupContentsService);
+
+    await expect(
+      controller.remove(3, 15, authenticatedRequest()),
+    ).rejects.toBe(deleteError);
+  });
 });
