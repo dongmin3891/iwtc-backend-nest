@@ -15,5 +15,7 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --omit=optional
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/prisma7.config.ts ./prisma7.config.ts
 EXPOSE 3001
 CMD ["node", "dist/main.js"]

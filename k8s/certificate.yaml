@@ -1,0 +1,15 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: iwtc-backend-cert
+  namespace: iwtc
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  secretName: iwtc-backend-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - api.iwtc.ddongmy.com
+    - media.iwtc.ddongmy.com

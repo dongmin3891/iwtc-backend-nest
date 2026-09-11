@@ -1,0 +1,44 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: iwtc-minio-init
+  namespace: iwtc
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: iwtc-minio-init
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: minio-init
+          image: minio/mc:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              attempts=0
+              until mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"; do
+                attempts=$((attempts + 1))
+                if [ "$attempts" -ge 60 ]; then
+                  echo "MinIO did not become ready"
+                  exit 1
+                fi
+                sleep 2
+              done
+              mc mb --ignore-existing "local/$S3_BUCKET"
+              mc anonymous set download "local/$S3_BUCKET"
+              mc admin user add local "$S3_ACCESS_KEY_ID" "$S3_SECRET_ACCESS_KEY"
+              mc admin policy attach local readwrite --user "$S3_ACCESS_KEY_ID"
+          envFrom:
+            - configMapRef:
+                name: iwtc-backend-config
+            - secretRef:
+                name: iwtc-secrets

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: iwtc-backend-config
+  namespace: iwtc
+data:
+  NODE_ENV: production
+  PORT: "3001"
+  CORS_ORIGINS: https://iwtc.ddongmy.com
+  MEDIA_PUBLIC_BASE_URL: https://media.iwtc.ddongmy.com/iwtc
+  S3_ENDPOINT: https://media.iwtc.ddongmy.com
+  S3_REGION: us-east-1
+  S3_BUCKET: iwtc
+  S3_FORCE_PATH_STYLE: "true"
+  JWT_ACCESS_TTL_SECONDS: "900"
+  JWT_REFRESH_TTL_SECONDS: "2592000"

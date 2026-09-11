@@ -1,0 +1,31 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: iwtc-database-migration
+  namespace: iwtc
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/sync-wave: "2"
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: iwtc-database-migration
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migration
+          image: ghcr.io/dongmin3891/iwtc-backend-nest:latest
+          imagePullPolicy: Always
+          command:
+            - npm
+            - run
+            - db:migrate:deploy
+          envFrom:
+            - configMapRef:
+                name: iwtc-backend-config
+            - secretRef:
+                name: iwtc-secrets
