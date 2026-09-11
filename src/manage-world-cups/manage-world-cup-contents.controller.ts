@@ -10,10 +10,15 @@ import {
   Post,
   Put,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBadRequestResponse,
+  ApiBody,
+  ApiConsumes,
   ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiNoContentResponse,
@@ -27,9 +32,15 @@ import { AccessTokenGuard } from '../auth/access-token.guard.js';
 import type { AuthenticatedRequest } from '../auth/auth.types.js';
 import { success, type ApiResponse } from '../common/api-response.js';
 import { CreateWorldCupContentsDto } from './dto/create-world-cup-contents.dto.js';
+import { CreateStaticWorldCupContentDto } from './dto/create-static-world-cup-content.dto.js';
 import { UpdateWorldCupContentsDto } from './dto/update-world-cup-contents.dto.js';
 import { ManageWorldCupContentsService } from './manage-world-cup-contents.service.js';
 import type { ManagedWorldCupContent } from './manage-world-cup-contents.types.js';
+import {
+  MAX_STATIC_IMAGE_SIZE,
+  StaticImageFilePipe,
+  type UploadedStaticImage,
+} from './static-image-file.js';
 
 @ApiTags('world-cup-content-management')
 @Controller('me/game-contents-manage/world-cups')
@@ -56,6 +67,44 @@ export class ManageWorldCupContentsController {
       body.data,
     );
     return success('게임 생성', null);
+  }
+
+  @Post(':worldCupId/contents/static')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: MAX_STATIC_IMAGE_SIZE } }),
+  )
+  @ApiOperation({ summary: '내 월드컵 이미지 후보 생성' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['contentsName', 'visibleType', 'file'],
+      properties: {
+        contentsName: { type: 'string', minLength: 1, maxLength: 100 },
+        visibleType: { type: 'string', enum: ['PUBLIC', 'PRIVATE'] },
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiCreatedResponse({ description: '이미지 후보 생성' })
+  @ApiBadRequestResponse({
+    description: '후보 또는 이미지 파일이 올바르지 않음',
+  })
+  @ApiNotFoundResponse({ description: '소유한 월드컵을 찾을 수 없음' })
+  async createStatic(
+    @Param('worldCupId', ParseIntPipe) worldCupId: number,
+    @Body() body: CreateStaticWorldCupContentDto,
+    @UploadedFile(StaticImageFilePipe) file: UploadedStaticImage,
+    @Req() request: Request & AuthenticatedRequest,
+  ): Promise<ApiResponse<number>> {
+    const candidateId =
+      await this.manageWorldCupContentsService.createStaticImage(
+        request.member.id,
+        worldCupId,
+        body,
+        file,
+      );
+    return success('이미지 후보 생성', candidateId);
   }
 
   @Put(':worldCupId/contents/:contentsId')

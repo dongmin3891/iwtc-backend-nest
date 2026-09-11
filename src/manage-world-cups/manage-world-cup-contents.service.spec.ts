@@ -1,4 +1,5 @@
 import type { PrismaService } from '../prisma/prisma.service.js';
+import type { ObjectStorageService } from '../media-files/object-storage.service.js';
 import type { CreateWorldCupContentDto } from './dto/create-world-cup-contents.dto.js';
 import type { UpdateWorldCupContentsDto } from './dto/update-world-cup-contents.dto.js';
 import { ManageWorldCupContentsService } from './manage-world-cup-contents.service.js';
@@ -34,6 +35,167 @@ function youtubeCandidateUpdate(): UpdateWorldCupContentsDto {
 }
 
 describe('ManageWorldCupContentsService', () => {
+  it('uploads and stores a static image candidate with the next sort order', async () => {
+    const transaction = {
+      $queryRaw: vi.fn().mockResolvedValue([{ locked: true }]),
+      worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
+      candidate: {
+        findFirst: vi.fn().mockResolvedValue({ sortOrder: 4 }),
+        create: vi.fn().mockResolvedValue({ id: 15 }),
+      },
+      mediaFile: { create: vi.fn().mockResolvedValue({ id: 25 }) },
+    };
+    const prisma = {
+      worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
+      $transaction: vi.fn(
+        (operation: (client: typeof transaction) => Promise<number>) =>
+          operation(transaction),
+      ),
+    } as unknown as PrismaService;
+    const objectStorage = {
+      putObject: vi.fn().mockResolvedValue(undefined),
+      deleteObject: vi.fn(),
+    } as unknown as ObjectStorageService;
+    const service = new ManageWorldCupContentsService(prisma, objectStorage);
+    const image = {
+      buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      mimetype: 'image/png',
+      originalname: '후보.png',
+      size: 8,
+    };
+
+    await expect(
+      service.createStaticImage(
+        7,
+        3,
+        { contentsName: '이미지 후보', visibleType: 'PRIVATE' },
+        image,
+      ),
+    ).resolves.toBe(15);
+
+    expect(objectStorage.putObject).toHaveBeenCalledWith({
+      key: expect.stringMatching(
+        /^world-cups\/3\/candidates\/[0-9a-f-]+\.png$/,
+      ),
+      body: image.buffer,
+      contentType: 'image/png',
+    });
+    const objectKey = vi.mocked(objectStorage.putObject).mock.calls[0]![0].key;
+    expect(transaction.mediaFile.create).toHaveBeenCalledWith({
+      data: {
+        fileType: 'STATIC_MEDIA_FILE',
+        detailType: 'PNG',
+        objectKey,
+        thumbnailObjectKey: null,
+        externalUrl: null,
+        originalName: '후보.png',
+        videoStartTime: null,
+        videoPlayDuration: null,
+      },
+      select: { id: true },
+    });
+    expect(transaction.candidate.create).toHaveBeenCalledWith({
+      data: {
+        worldCupId: 3,
+        name: '이미지 후보',
+        mediaFileId: 25,
+        visibleType: 'PRIVATE',
+        sortOrder: 5,
+      },
+      select: { id: true },
+    });
+    expect(objectStorage.deleteObject).not.toHaveBeenCalled();
+  });
+
+  it('removes an uploaded image if database storage fails', async () => {
+    const databaseError = new Error('database unavailable');
+    const prisma = {
+      worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
+      $transaction: vi.fn().mockRejectedValue(databaseError),
+    } as unknown as PrismaService;
+    const objectStorage = {
+      putObject: vi.fn().mockResolvedValue(undefined),
+      deleteObject: vi.fn().mockResolvedValue(undefined),
+    } as unknown as ObjectStorageService;
+    const service = new ManageWorldCupContentsService(prisma, objectStorage);
+
+    await expect(
+      service.createStaticImage(
+        7,
+        3,
+        { contentsName: '이미지 후보', visibleType: 'PUBLIC' },
+        {
+          buffer: Buffer.from([0xff, 0xd8, 0xff]),
+          mimetype: 'image/jpeg',
+          originalname: 'candidate.jpg',
+          size: 3,
+        },
+      ),
+    ).rejects.toBe(databaseError);
+
+    const objectKey = vi.mocked(objectStorage.putObject).mock.calls[0]![0].key;
+    expect(objectStorage.deleteObject).toHaveBeenCalledWith(objectKey);
+  });
+
+  it('does not upload an image when the member does not own the world cup', async () => {
+    const prisma = {
+      worldCup: { findFirst: vi.fn().mockResolvedValue(null) },
+      $transaction: vi.fn(),
+    } as unknown as PrismaService;
+    const objectStorage = {
+      putObject: vi.fn(),
+      deleteObject: vi.fn(),
+    } as unknown as ObjectStorageService;
+    const service = new ManageWorldCupContentsService(prisma, objectStorage);
+
+    await expect(
+      service.createStaticImage(
+        7,
+        99,
+        { contentsName: '이미지 후보', visibleType: 'PRIVATE' },
+        {
+          buffer: Buffer.from('GIF89a'),
+          mimetype: 'image/gif',
+          originalname: 'candidate.gif',
+          size: 6,
+        },
+      ),
+    ).rejects.toThrow('월드컵을 찾을 수 없습니다.');
+
+    expect(objectStorage.putObject).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('does not write to the database when image upload fails', async () => {
+    const storageError = new Error('object storage unavailable');
+    const prisma = {
+      worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
+      $transaction: vi.fn(),
+    } as unknown as PrismaService;
+    const objectStorage = {
+      putObject: vi.fn().mockRejectedValue(storageError),
+      deleteObject: vi.fn(),
+    } as unknown as ObjectStorageService;
+    const service = new ManageWorldCupContentsService(prisma, objectStorage);
+
+    await expect(
+      service.createStaticImage(
+        7,
+        3,
+        { contentsName: '이미지 후보', visibleType: 'PUBLIC' },
+        {
+          buffer: Buffer.from('GIF89a'),
+          mimetype: 'image/gif',
+          originalname: 'candidate.gif',
+          size: 6,
+        },
+      ),
+    ).rejects.toBe(storageError);
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(objectStorage.deleteObject).not.toHaveBeenCalled();
+  });
+
   it('stores multiple candidates in request order with consecutive sort orders', async () => {
     const transaction = {
       $queryRaw: vi.fn().mockResolvedValue([{ locked: true }]),
@@ -79,9 +241,9 @@ describe('ManageWorldCupContentsService', () => {
     const [query, lockNamespace, lockedWorldCupId] =
       transaction.$queryRaw.mock.calls[0]!;
     expect(Array.from(query as TemplateStringsArray)).toEqual([
-      '\n        SELECT pg_advisory_xact_lock(\n          CAST(',
-      ' AS INTEGER),\n          CAST(',
-      ' AS INTEGER)\n        ) IS NULL AS "locked"\n      ',
+      '\n      SELECT pg_advisory_xact_lock(\n        CAST(',
+      ' AS INTEGER),\n        CAST(',
+      ' AS INTEGER)\n      ) IS NULL AS "locked"\n    ',
     ]);
     expect(lockNamespace).toBe(0x49575443);
     expect(lockedWorldCupId).toBe(3);

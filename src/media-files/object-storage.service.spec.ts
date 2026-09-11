@@ -1,4 +1,4 @@
-import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import type { ConfigService } from '@nestjs/config';
 import { ObjectStorageService } from './object-storage.service.js';
 
@@ -46,5 +46,23 @@ describe('ObjectStorageService', () => {
         contentType: 'image/png',
       }),
     ).rejects.toBe(storageError);
+  });
+
+  it('deletes an object from the configured bucket', async () => {
+    const send = vi.fn().mockResolvedValue({});
+    const service = new ObjectStorageService({ send }, {
+      getOrThrow: vi.fn().mockReturnValue('iwtc'),
+    } as unknown as ConfigService);
+
+    await expect(
+      service.deleteObject('world-cups/3/candidates/image.png'),
+    ).resolves.toBeUndefined();
+
+    const command = send.mock.calls[0]![0];
+    expect(command).toBeInstanceOf(DeleteObjectCommand);
+    expect(command.input).toEqual({
+      Bucket: 'iwtc',
+      Key: 'world-cups/3/candidates/image.png',
+    });
   });
 });

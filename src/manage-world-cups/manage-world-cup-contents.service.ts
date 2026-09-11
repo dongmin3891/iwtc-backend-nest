@@ -1,15 +1,103 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '../generated/prisma/client.js';
+import { ObjectStorageService } from '../media-files/object-storage.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import type { CreateStaticWorldCupContentDto } from './dto/create-static-world-cup-content.dto.js';
 import type { CreateWorldCupContentDto } from './dto/create-world-cup-contents.dto.js';
 import type { UpdateWorldCupContentsDto } from './dto/update-world-cup-contents.dto.js';
 import type { ManagedWorldCupContent } from './manage-world-cup-contents.types.js';
+import {
+  type UploadedStaticImage,
+  validateStaticImage,
+} from './static-image-file.js';
 
 const CANDIDATE_ORDER_LOCK_NAMESPACE = 0x49575443;
 
 @Injectable()
 export class ManageWorldCupContentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ManageWorldCupContentsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly objectStorage: ObjectStorageService,
+  ) {}
+
+  async createStaticImage(
+    memberId: number,
+    worldCupId: number,
+    request: CreateStaticWorldCupContentDto,
+    file: UploadedStaticImage | undefined,
+  ): Promise<number> {
+    const image = validateStaticImage(file);
+    const ownedWorldCup = await this.prisma.worldCup.findFirst({
+      where: { id: worldCupId, ownerId: memberId },
+      select: { id: true },
+    });
+    if (!ownedWorldCup) {
+      throw new NotFoundException('월드컵을 찾을 수 없습니다.');
+    }
+
+    const objectKey = `world-cups/${worldCupId}/candidates/${randomUUID()}.${image.extension}`;
+    await this.objectStorage.putObject({
+      key: objectKey,
+      body: file!.buffer,
+      contentType: file!.mimetype,
+    });
+
+    try {
+      return await this.prisma.$transaction(async (transaction) => {
+        const stillOwnedWorldCup = await transaction.worldCup.findFirst({
+          where: { id: worldCupId, ownerId: memberId },
+          select: { id: true },
+        });
+        if (!stillOwnedWorldCup) {
+          throw new NotFoundException('월드컵을 찾을 수 없습니다.');
+        }
+
+        await this.lockCandidateOrder(transaction, worldCupId);
+        const sortOrder = await this.nextCandidateSortOrder(
+          transaction,
+          worldCupId,
+        );
+        const mediaFile = await transaction.mediaFile.create({
+          data: {
+            fileType: 'STATIC_MEDIA_FILE',
+            detailType: image.detailType,
+            objectKey,
+            thumbnailObjectKey: null,
+            externalUrl: null,
+            originalName: file!.originalname,
+            videoStartTime: null,
+            videoPlayDuration: null,
+          },
+          select: { id: true },
+        });
+        const candidate = await transaction.candidate.create({
+          data: {
+            worldCupId,
+            name: request.contentsName,
+            mediaFileId: mediaFile.id,
+            visibleType: request.visibleType,
+            sortOrder,
+          },
+          select: { id: true },
+        });
+
+        return candidate.id;
+      });
+    } catch (error) {
+      try {
+        await this.objectStorage.deleteObject(objectKey);
+      } catch (cleanupError) {
+        this.logger.error(
+          `Failed to remove orphaned object ${objectKey}`,
+          cleanupError instanceof Error ? cleanupError.stack : undefined,
+        );
+      }
+      throw error;
+    }
+  }
 
   async createOne(
     memberId: number,
@@ -35,20 +123,11 @@ export class ManageWorldCupContentsService {
         throw new NotFoundException('월드컵을 찾을 수 없습니다.');
       }
 
-      await transaction.$queryRaw`
-        SELECT pg_advisory_xact_lock(
-          CAST(${CANDIDATE_ORDER_LOCK_NAMESPACE} AS INTEGER),
-          CAST(${worldCupId} AS INTEGER)
-        ) IS NULL AS "locked"
-      `;
-
-      const lastCandidate = await transaction.candidate.findFirst({
-        where: { worldCupId },
-        orderBy: [{ sortOrder: 'desc' }, { id: 'desc' }],
-        select: { sortOrder: true },
-      });
-
-      const firstSortOrder = (lastCandidate?.sortOrder ?? -1) + 1;
+      await this.lockCandidateOrder(transaction, worldCupId);
+      const firstSortOrder = await this.nextCandidateSortOrder(
+        transaction,
+        worldCupId,
+      );
       const candidateIds: number[] = [];
       for (const [index, request] of requests.entries()) {
         const candidateId = await this.createCandidate(
@@ -62,6 +141,31 @@ export class ManageWorldCupContentsService {
 
       return candidateIds;
     });
+  }
+
+  private async lockCandidateOrder(
+    transaction: Prisma.TransactionClient,
+    worldCupId: number,
+  ): Promise<void> {
+    await transaction.$queryRaw`
+      SELECT pg_advisory_xact_lock(
+        CAST(${CANDIDATE_ORDER_LOCK_NAMESPACE} AS INTEGER),
+        CAST(${worldCupId} AS INTEGER)
+      ) IS NULL AS "locked"
+    `;
+  }
+
+  private async nextCandidateSortOrder(
+    transaction: Prisma.TransactionClient,
+    worldCupId: number,
+  ): Promise<number> {
+    const lastCandidate = await transaction.candidate.findFirst({
+      where: { worldCupId },
+      orderBy: [{ sortOrder: 'desc' }, { id: 'desc' }],
+      select: { sortOrder: true },
+    });
+
+    return (lastCandidate?.sortOrder ?? -1) + 1;
   }
 
   private async createCandidate(

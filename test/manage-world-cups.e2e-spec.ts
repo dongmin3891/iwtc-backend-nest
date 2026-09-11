@@ -83,6 +83,7 @@ describe('Manage world cups API (e2e)', () => {
   };
   const manageWorldCupContentsService = {
     createMany: vi.fn().mockResolvedValue([51, 52]),
+    createStaticImage: vi.fn().mockResolvedValue(53),
     updateOne: vi.fn().mockResolvedValue(31),
     remove: vi.fn().mockResolvedValue(undefined),
     findAll: vi.fn().mockResolvedValue([
@@ -96,6 +97,8 @@ describe('Manage world cups API (e2e)', () => {
       },
     ]),
   };
+
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
   beforeAll(async () => {
     const config = new ConfigService({
@@ -201,6 +204,52 @@ describe('Manage world cups API (e2e)', () => {
       .expect(400);
 
     expect(manageWorldCupsService.create).not.toHaveBeenCalled();
+  });
+
+  it('creates a static image candidate from multipart data', async () => {
+    await request(app.getHttpServer())
+      .post('/api/me/game-contents-manage/world-cups/3/contents/static')
+      .set('access-token', 'valid-token')
+      .field('contentsName', '  이미지 후보  ')
+      .field('visibleType', 'PRIVATE')
+      .attach('file', png, {
+        filename: 'candidate.png',
+        contentType: 'image/png',
+      })
+      .expect(201)
+      .expect({ code: 1, message: '이미지 후보 생성', data: 53 });
+
+    expect(
+      manageWorldCupContentsService.createStaticImage,
+    ).toHaveBeenCalledWith(
+      7,
+      3,
+      { contentsName: '이미지 후보', visibleType: 'PRIVATE' },
+      expect.objectContaining({
+        buffer: png,
+        mimetype: 'image/png',
+        originalname: 'candidate.png',
+        size: png.length,
+      }),
+    );
+  });
+
+  it('rejects a static candidate request without an image', async () => {
+    await request(app.getHttpServer())
+      .post('/api/me/game-contents-manage/world-cups/3/contents/static')
+      .set('access-token', 'valid-token')
+      .field('contentsName', '이미지 후보')
+      .field('visibleType', 'PRIVATE')
+      .expect(400)
+      .expect({
+        code: -1,
+        message: '이미지 파일이 필요합니다.',
+        data: null,
+      });
+
+    expect(
+      manageWorldCupContentsService.createStaticImage,
+    ).not.toHaveBeenCalled();
   });
 
   it('returns management contents for an owned world cup', async () => {

@@ -1,4 +1,8 @@
-import { PutObjectCommand, type S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  PutObjectCommand,
+  type S3Client,
+} from '@aws-sdk/client-s3';
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { S3_CLIENT } from './s3-client.provider.js';
@@ -27,6 +31,15 @@ export class ObjectStorageService {
         Key: input.key,
         Body: input.body,
         ContentType: input.contentType,
+      }),
+    );
+  }
+
+  async deleteObject(key: string): Promise<void> {
+    await this.client.send(
+      new DeleteObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
       }),
     );
   }

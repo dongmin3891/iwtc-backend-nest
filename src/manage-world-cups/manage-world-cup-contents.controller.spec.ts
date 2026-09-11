@@ -57,6 +57,32 @@ function updateRequest(): UpdateWorldCupContentsDto {
 }
 
 describe('ManageWorldCupContentsController', () => {
+  it('returns the created static image candidate id', async () => {
+    const createStaticImage = vi.fn().mockResolvedValue(15);
+    const controller = new ManageWorldCupContentsController({
+      createStaticImage,
+    } as unknown as ManageWorldCupContentsService);
+    const body = {
+      contentsName: '이미지 후보',
+      visibleType: 'PUBLIC',
+    } as const;
+    const file = {
+      buffer: Buffer.from([0xff, 0xd8, 0xff]),
+      mimetype: 'image/jpeg',
+      originalname: 'candidate.jpg',
+      size: 3,
+    };
+
+    await expect(
+      controller.createStatic(3, body, file, authenticatedRequest()),
+    ).resolves.toEqual({
+      code: 1,
+      message: '이미지 후보 생성',
+      data: 15,
+    });
+    expect(createStaticImage).toHaveBeenCalledWith(7, 3, body, file);
+  });
+
   it('passes the authenticated member and validated candidate array to the service', async () => {
     const createMany = vi.fn().mockResolvedValue([11, 12]);
     const controller = new ManageWorldCupContentsController({
@@ -130,8 +156,8 @@ describe('ManageWorldCupContentsController', () => {
       remove,
     } as unknown as ManageWorldCupContentsService);
 
-    await expect(
-      controller.remove(3, 15, authenticatedRequest()),
-    ).rejects.toBe(deleteError);
+    await expect(controller.remove(3, 15, authenticatedRequest())).rejects.toBe(
+      deleteError,
+    );
   });
 });
