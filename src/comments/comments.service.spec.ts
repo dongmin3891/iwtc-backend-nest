@@ -50,9 +50,10 @@ describe('CommentsService', () => {
 
   it('creates a guest comment for a public candidate in the world cup', async () => {
     const create = vi.fn().mockResolvedValue({ id: 1 });
+    const findCandidate = vi.fn().mockResolvedValue({ id: 3 });
     const prisma = {
       worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 1 }) },
-      candidate: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
+      candidate: { findFirst: findCandidate },
       comment: { create },
     } as unknown as PrismaService;
     const service = new CommentsService(prisma);
@@ -61,6 +62,15 @@ describe('CommentsService', () => {
     request.nickname = 'guest-b2';
 
     await expect(service.create(1, 3, request)).resolves.toBeNull();
+    expect(findCandidate).toHaveBeenCalledWith({
+      where: {
+        id: 3,
+        worldCupId: 1,
+        visibleType: 'PUBLIC',
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
     expect(create).toHaveBeenCalledWith({
       data: {
         worldCupId: 1,
@@ -132,11 +142,12 @@ describe('CommentsService', () => {
     ).rejects.toMatchObject({ status: 404 });
   });
 
-  it('rejects a candidate that does not belong to the world cup', async () => {
+  it('rejects a deleted, private, missing, or another world cup candidate', async () => {
     const create = vi.fn();
+    const findCandidate = vi.fn().mockResolvedValue(null);
     const prisma = {
       worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 1 }) },
-      candidate: { findFirst: vi.fn().mockResolvedValue(null) },
+      candidate: { findFirst: findCandidate },
       comment: { create },
     } as unknown as PrismaService;
     const service = new CommentsService(prisma);
@@ -146,6 +157,15 @@ describe('CommentsService', () => {
 
     await expect(service.create(1, 999, request)).rejects.toMatchObject({
       status: 404,
+    });
+    expect(findCandidate).toHaveBeenCalledWith({
+      where: {
+        id: 999,
+        worldCupId: 1,
+        visibleType: 'PUBLIC',
+        deletedAt: null,
+      },
+      select: { id: true },
     });
     expect(create).not.toHaveBeenCalled();
   });
