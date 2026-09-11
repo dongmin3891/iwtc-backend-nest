@@ -1,6 +1,6 @@
 # IWTC 개발 인수인계
 
-마지막 확인일: 2026-09-10
+마지막 확인일: 2026-09-11
 
 이 문서는 다른 컴퓨터나 새 Cursor 환경에서 IWTC 개발을 바로 이어가기 위한 현재 상태와 실행 절차를 정리한다.
 
@@ -12,18 +12,20 @@
 - 새 Prisma migration과 새 데이터로 시작한다.
 - 기존 Spring 저장소는 API 동작과 비즈니스 규칙을 확인하는 참고 자료로만 사용한다.
 - 로컬 개발 비밀번호와 운영 비밀번호를 분리한다. 실제 운영 비밀번호는 Git에 올리지 않고 Kubernetes Secret으로 관리한다.
+- 운영 환경은 홈서버 K3s에 프론트엔드, 백엔드, PostgreSQL, MinIO를 함께 배포한다.
+- PostgreSQL과 MinIO 데이터는 PVC에 저장해 Pod 재시작 후에도 유지하고, 홈서버 장애에 대비한 백업은 추후 Cloudflare R2 같은 외부 저장소로 보낸다.
 
 ## 2. 저장소와 기준 브랜치
 
 | 용도               | 저장소                                                 | 기준 브랜치                 | 기능 기준 커밋 |
 | ------------------ | ------------------------------------------------------ | --------------------------- | -------------- |
-| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `e87f2e3`      |
-| 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `5cbf787`      |
+| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `d31022e`      |
+| 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `a5032d7`      |
 | 기존 Spring 참고용 | `https://github.com/dongmin3891/iwtc-backend-new.git`  | `codex/nest-migration-plan` | `3703d2d`      |
 
 신규 개발 코드는 `iwtc-backend-nest`에 작성한다. `iwtc-backend-new`를 신규 서버로 배포하지 않는다.
 
-게임 결과·랭킹·미디어·회원·비회원 댓글·회원 인증·회원 댓글 삭제·내 월드컵 목록·상세·생성·관리용 후보 목록 구현과 프론트엔드의 게임 완료·댓글 작성·삭제·로그인·후보 응답 매핑 수정은 각 원격 기준 브랜치에 push되어 있다. `iwtc.code-workspace`는 신규 백엔드 작업 트리에만 있는 로컬 편의 파일이며 커밋하지 않았다.
+게임 결과·랭킹·미디어·회원·비회원 댓글·회원 인증·회원 댓글 삭제·내 월드컵 목록·상세·생성·관리용 후보 목록·후보 생성·수정·삭제·정적 이미지 업로드와 교체 구현은 각 원격 기준 브랜치에 push되어 있다. `iwtc.code-workspace`는 신규 백엔드 작업 트리에만 있는 로컬 편의 파일이며 커밋하지 않았다.
 
 ## 3. 새 환경에 내려받기
 
@@ -73,7 +75,7 @@ nvm install
 nvm use
 npm ci
 cp .env.example .env
-docker compose up -d postgres
+docker compose up -d
 npm run db:migrate
 npm run db:seed
 npm run start:dev
@@ -151,6 +153,11 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 - 유튜브 후보 수정 요청 DTO와 입력 검증
 - 소유자 전용 후보·유튜브 미디어 트랜잭션 수정 서비스
 - 소유자 전용 후보 수정 PUT 컨트롤러
+- 소유자 전용 후보 소프트 삭제 API와 삭제 후보의 관리·수정·댓글 차단
+- S3 호환 오브젝트 스토리지 클라이언트와 로컬 MinIO 실행 환경
+- JPEG·PNG·GIF 정적 이미지 후보 multipart 업로드
+- 정적 이미지 후보명·공개 상태 수정과 선택적 이미지 교체
+- 이미지 저장 실패 시 새 객체 정리, 교체 성공 시 이전 객체 정리
 - 후보 소프트 삭제용 `Candidate.deletedAt` 스키마와 migration
 - 후보 물리 삭제로 댓글이 사라지지 않게 보호하는 외래 키
 - 공개 월드컵 미리보기와 플레이 가능 라운드의 삭제 후보 제외
@@ -187,13 +194,16 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 | POST   | `/api/me/game-manage/world-cups`                              | 완료 |
 | GET    | `/api/me/game-contents-manage/world-cups/{worldCupId}/manage-contents` | 완료 |
 | POST   | `/api/me/game-contents-manage/world-cups/{worldCupId}/contents` | 완료 |
+| POST   | `/api/me/game-contents-manage/world-cups/{worldCupId}/contents/static` | 완료 |
 | PUT    | `/api/me/game-contents-manage/world-cups/{worldCupId}/contents/{contentsId}` | 완료 |
+| PUT    | `/api/me/game-contents-manage/world-cups/{worldCupId}/contents/{contentsId}/static` | 완료 |
+| DELETE | `/api/me/game-contents-manage/world-cups/{worldCupId}/contents/{contentsId}` | 완료 |
 
 개발용 seed는 공개 월드컵 1개와 `후보 A`부터 `후보 D`까지 총 4개 후보를 만든다. 후보 ID는 실행 환경에 따라 달라질 수 있으므로 코드에서 특정 ID를 전제로 사용하지 않는다.
 
 게임 결과는 `GamePlay`와 `GamePlacement`에 저장한다. `playId`는 UUID v4이며 같은 결과의 재요청은 기존 결과를 반환하고, 같은 `playId`를 다른 결과에 사용하면 HTTP 409를 반환한다. 랭킹은 후보별 누적 점수로 계산하고 동점 후보에게 같은 순위를 부여한다.
 
-미디어는 PostgreSQL에 메타데이터와 object key만 저장한다. 정적 파일 응답은 `MEDIA_PUBLIC_BASE_URL` 기반의 공개 URL이며 `size=divide2`에 썸네일 key가 없으면 원본 URL로 대체한다. 현재 Compose에는 실제 S3 호환 오브젝트 스토리지가 포함되어 있지 않으므로 운영·로컬 저장소 공급자는 별도로 구성해야 한다.
+미디어는 PostgreSQL에 메타데이터와 object key만 저장한다. 정적 파일 응답은 `MEDIA_PUBLIC_BASE_URL` 기반의 공개 URL이며 `size=divide2`에 썸네일 key가 없으면 원본 URL로 대체한다. 로컬 Compose에는 MinIO와 버킷 초기화 구성이 포함되어 있다. 정적 이미지는 JPEG·PNG·GIF, 최대 10MB를 허용한다. 생성 시 업로드 후 DB 저장에 실패하면 새 객체를 지우고, 교체 시 DB 트랜잭션이 성공한 뒤 이전 객체를 지운다.
 
 댓글은 회원과 비회원 모두 작성할 수 있다. 비회원은 닉네임이 필수이며 `memberId`를 `null`로 저장한다. 회원은 프론트가 전달한 `access-token`으로 확인한 서버의 `memberId`와 닉네임을 저장하므로 요청 닉네임을 생략할 수 있고, 요청에 닉네임이 있어도 신뢰하지 않는다. 토큰 헤더가 없을 때만 비회원으로 처리하며 유효하지 않은 토큰을 보내면 HTTP 401을 반환한다. 본문은 공백 제거 후 1–30자, 비회원 닉네임은 1–50자로 검증한다. 작성 대상 후보가 공개 상태이며 요청 월드컵에 속하는지 확인한다. 목록은 `createdAt DESC, id DESC`로 안정적으로 정렬하며 `offset`은 건너뛸 행 수, `limit`은 조회 수다. 기본 `limit`은 20이고 최대 100이다. 회원 댓글 삭제는 작성 회원 본인만 가능하며 행을 제거하지 않고 `deletedAt`을 기록한다. 미인증 요청은 HTTP 401, 다른 회원 또는 비회원 댓글 삭제 요청은 HTTP 403, 없거나 이미 삭제된 댓글은 HTTP 404를 반환한다. 목록에서는 삭제된 댓글을 제외한다. 운영 공개 전 rate limit과 스팸 방지 정책이 필요하다.
 
@@ -211,9 +221,9 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 
 후보 수정 요청 DTO는 기존 프론트 PUT 요청과 호환되는 `contentsName`, `originalName`, `mediaData`, `detailFileType`, `videoStartTime`, `videoPlayDuration`, `visibleType`을 받는다. 후보명과 문자열을 정규화하고 HTTPS YouTube watch 주소, 5자리 시작 시간, 3–5초 정수 재생 시간, `YOU_TUBE_URL`, `PUBLIC` 또는 `PRIVATE`만 허용하며 알 수 없는 필드는 거부한다. 수정 서비스는 월드컵 소유권과 후보 소속, 연결 미디어를 확인한 뒤 하나의 트랜잭션에서 후보와 YouTube 미디어를 함께 갱신한다. PUT API는 성공 시 HTTP 204를 반환하며 미인증·잘못된 입력·다른 회원 월드컵·다른 월드컵 후보를 자동화 테스트로 검증했다. 프론트의 공개 여부 수정값 전달과 수정 직후 미디어 캐시 무효화도 보정되어 있다.
 
-프론트 후보 입력 검증도 현재 백엔드의 유튜브 전용 생성 범위와 맞췄다. 신규 정적 이미지 후보는 서버로 전송하기 전에 차단하고 지원 전이라는 안내를 반환한다. 영상 후보는 HTTPS `youtube.com/watch?v=` 주소와 허용 호스트, 5자리 시작 시간, 3–5초의 정수 재생 시간을 검사한다. 기존 정적 파일 요청 변환 코드는 과거 데이터 호환을 위해 유지했다.
+프론트 후보 입력 검증은 이미지와 유튜브 후보를 모두 지원한다. 이미지는 JPEG·PNG·GIF와 최대 10MB를 검사하고 multipart 요청으로 개별 생성한다. 영상 후보는 HTTPS `youtube.com/watch?v=` 주소와 허용 호스트, 5자리 시작 시간, 3–5초의 정수 재생 시간을 검사한다.
 
-신규 후보 생성 폼에서도 정적 이미지 선택 버튼을 숨겼다. 폼에는 유튜브 영상 선택지만 노출하고 현재는 YouTube 영상만 등록할 수 있으며 이미지 파일은 추후 지원한다는 안내를 표시한다. 기존 유튜브 입력과 저장 전 도메인 검증, 과거 정적 파일 데이터 처리 코드는 유지했다.
+신규 후보 생성 폼에는 이미지 파일과 유튜브 영상 선택지를 모두 노출한다. 저장된 이미지 후보 수정은 후보명·공개 여부만 바꾸거나 새 파일을 선택해 이미지를 교체할 수 있다. 임의의 MinIO 공개 URL은 Next.js 이미지 호스트 허용 목록에 종속되지 않도록 일반 `<img>`로 표시한다.
 
 ## 8. 현재 확인된 사용자 흐름
 
@@ -236,9 +246,7 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 15. 로그인 회원 댓글에 access token 전달, 작성자 ID 연결, 본인 댓글 삭제 버튼 노출
 16. 삭제 확인 후 소프트 삭제 요청, 댓글 목록 즉시 갱신과 삭제 댓글 제외
 
-후보에 연결된 실제 이미지가 아직 없으므로 현재는 프론트엔드 기본 이미지가 표시된다.
-
-게임 결과·미디어·댓글·회원 인증 migration을 실제 로컬 PostgreSQL에 적용했다. 게임 완료 저장, 누적 랭킹 갱신, 댓글 작성과 목록 재조회, 회원가입부터 로그아웃까지 이어지는 브라우저 흐름을 확인했다. 로그인 회원이 닉네임 없이 댓글을 작성해도 서버 회원 ID와 닉네임으로 연결되는 흐름과 본인 댓글 삭제 후 목록에서 사라지는 흐름도 실제 API와 PostgreSQL로 확인했다. 비밀번호는 Argon2id, refresh token은 64자리 SHA-256 해시로만 DB에 저장되는 것도 확인했다. 검증용 회원·세션·댓글·게임 결과는 확인 후 삭제했다. 미디어 조회는 자동화 테스트로 검증했으며 실제 오브젝트 스토리지는 아직 연결하지 않았다.
+게임 결과·미디어·댓글·회원 인증 migration을 실제 로컬 PostgreSQL에 적용했다. 게임 완료 저장, 누적 랭킹 갱신, 댓글 작성과 목록 재조회, 회원가입부터 로그아웃까지 이어지는 브라우저 흐름을 확인했다. 로그인 회원이 닉네임 없이 댓글을 작성해도 서버 회원 ID와 닉네임으로 연결되는 흐름과 본인 댓글 삭제 후 목록에서 사라지는 흐름도 실제 API와 PostgreSQL로 확인했다. 비밀번호는 Argon2id, refresh token은 64자리 SHA-256 해시로만 DB에 저장되는 것도 확인했다. 검증용 회원·세션·댓글·게임 결과는 확인 후 삭제했다.
 
 월드컵 관리 API는 실제 로컬 PostgreSQL에서 회원가입, 로그인, 비공개 월드컵 생성, 내 목록과 상세 조회까지 확인했다. 다른 검증 회원으로 같은 월드컵 상세를 요청했을 때 HTTP 404가 반환되는 것도 확인했다. 이 과정에서 만든 검증용 회원·세션·월드컵은 확인 후 모두 삭제했다.
 
@@ -268,6 +276,10 @@ YouTube 후보 1개의 실제 브라우저 저장 흐름도 확인했다. 새 �
 
 공개 랭킹은 `visibleType: PUBLIC`이면서 `deletedAt: null`인 후보만 응답에 포함한다. 점수 집계는 먼저 조회한 활성 후보 ID에 대해서만 수행하므로 삭제 후보의 과거 `GamePlacement` 행은 DB에 보존하면서 현재 랭킹에서는 제외한다. 활성 후보의 과거 점수와 0점 후보 포함, 공동순위 계산 방식은 유지했다. 조회와 집계 조건을 단위 테스트로 고정했고 전체 린트, 단위 테스트 113개, API 통합 테스트 50개, 빌드가 통과했다.
 
+정적 이미지 후보의 생성과 교체를 실제 브라우저, PostgreSQL, MinIO로 확인했다. 이미지 후보를 생성하고 관리 화면을 새로고침했을 때 이미지와 후보명이 유지되었고, 후보명 변경·비공개 전환·다른 PNG로 교체한 뒤 다시 새로고침해도 변경값이 유지되었다. DB에는 새 object key와 원본 파일명이 저장되었으며 새 MinIO 객체는 업로드한 파일과 byte 단위로 일치했다. 교체 전 객체는 HTTP 404로 삭제를 확인했다. 검증용 회원·월드컵·후보·미디어·MinIO 객체는 확인 후 모두 삭제했다.
+
+이 브라우저 검증 중 저장된 MinIO URL을 Next.js `<Image>`가 허용되지 않은 외부 호스트로 판단해 관리 화면이 깨지는 문제를 발견했다. 저장된 정적 미디어 표시는 일반 `<img>`를 사용하도록 프론트에서 수정했고 `a5032d7`로 push했다. 수정 후 재조회 화면에서 이미지가 정상 표시되었다.
+
 ## 9. 검증 명령
 
 백엔드:
@@ -279,7 +291,7 @@ npm run test:e2e
 npm run build
 ```
 
-마지막 작업 기준으로 린트와 빌드, 단위 테스트 113개가 통과했다. API 통합 테스트는 후보 수정의 204·401·400·404 경우를 포함해 50개가 통과했다. 검증 명령은 프로젝트 기준 Node.js 24.19에서 실행해야 한다.
+마지막 작업 기준으로 린트와 빌드, 단위 테스트 142개가 통과했다. API 통합 테스트는 정적 이미지 생성·선택적 교체를 포함해 57개가 통과했다. 검증 명령은 프로젝트 기준 Node.js 24.19에서 실행해야 한다.
 
 프론트엔드:
 
@@ -287,9 +299,10 @@ npm run build
 npm run typecheck
 npm run lint
 npm test
+npm run build
 ```
 
-마지막 작업 기준으로 프론트 타입 검사, 테스트 59개, 린트와 프로덕션 빌드가 통과했다. 기존 `<img>` 사용과 관련된 Next.js 린트 경고 3건이 있으나 실패는 아니다. `npm ci`에서 기존 의존성 취약점이 보고되었으며, 별도 검토 없이 강제 자동 수정하지 않는다.
+마지막 작업 기준으로 프론트 타입 검사, 테스트 65개, 린트와 프로덕션 빌드가 통과했다. 기존 및 저장소 이미지 표시용 `<img>`와 관련된 Next.js 린트 경고 4건이 있으나 실패는 아니다. `npm ci`에서 기존 의존성 취약점이 보고되었으며, 별도 검토 없이 강제 자동 수정하지 않는다.
 
 ## 10. 참고 문서
 
@@ -303,19 +316,50 @@ npm test
 
 ## 11. 다음 작업
 
-후보 삭제 전 관계와 조회 로직 검토를 완료했고 결정 사항을 `CANDIDATE_DELETION_POLICY.md`에 정리했다. 후보는 `Candidate.deletedAt` 기반 소프트 삭제를 사용하고 과거 `GamePlacement`, `Comment`, 연결 미디어를 보존한다. 삭제 후보는 공개 게임, 새 결과 제출, 공개 랭킹, 관리 목록, 수정, 새 댓글 작성에서 제외한다. 월드컵 댓글 목록과 이미 저장된 `playId` 결과 재요청은 기록 보존을 위해 유지한다.
+후보 생성·수정·삭제와 실제 S3 호환 이미지 업로드까지 완료되었다. 다음 목표는 `ddongmy-os`에서 사용 중인 GitOps 흐름을 IWTC 프론트엔드와 백엔드에 적용하는 것이다.
 
-Prisma 스키마와 공개 월드컵·게임·랭킹 단계는 완료되었다. 다음 한 단계에서는 `ManageWorldCupContentsService.findAll`의 관리 후보 목록에만 `deletedAt: null` 조건을 추가하고 단위 테스트를 보강한다. 후보 수정, 댓글, 삭제 API와 프론트엔드는 아직 수정하지 않는다.
+확정된 운영 구조는 다음과 같다.
 
-그다음 우선순위는 다음과 같다.
+```text
+Internet
+  -> Traefik
+     -> iwtc.ddongmy.com       -> Frontend
+     -> api.iwtc.ddongmy.com   -> NestJS Backend
+     -> media.iwtc.ddongmy.com -> MinIO S3 API
 
-1. 후보 일괄 생성, 수정, 삭제
-2. 실제 S3 호환 오브젝트 스토리지와 미디어 업로드
-3. GitHub Actions, GHCR, Kubernetes, Argo CD 배포
-4. PostgreSQL 백업과 복구 테스트
+K3s / namespace: iwtc
+  -> Frontend Deployment
+  -> Backend Deployment
+  -> PostgreSQL StatefulSet + PVC 5Gi
+  -> MinIO StatefulSet + PVC 20Gi
+```
+
+- 프론트엔드, 백엔드, PostgreSQL, MinIO를 모두 홈서버 K3s에서 운영한다.
+- K3s 기본 `local-path` StorageClass를 전제로 시작하되, 실제 적용 전 홈서버에서 `kubectl get storageclass`로 확인한다.
+- PostgreSQL과 MinIO는 각각 단일 replica StatefulSet으로 시작하고 PVC에 데이터를 보존한다.
+- PVC는 Pod 재시작에는 안전하지만 홈서버 디스크 장애까지 보호하지 않으므로 외부 백업이 필수다.
+- 운영 Secret은 Git에 커밋하지 않고 `iwtc` namespace의 Kubernetes Secret으로 주입한다.
+- MinIO 관리 콘솔은 외부에 공개하지 않고 S3 API만 `media.iwtc.ddongmy.com`으로 노출한다.
+- `iwtc` 버킷은 초기화 Job으로 만들고 이미지 다운로드만 공개한다.
+- Prisma migration은 여러 백엔드 Pod가 동시에 실행하지 않도록 Argo CD `PreSync` Job으로 수행한다.
+- TLS는 세 서브도메인을 포함하는 인증서 또는 `*.ddongmy.com` wildcard 인증서가 필요하다.
+
+구현 순서는 다음과 같다.
+
+1. 백엔드 저장소에 `k8s/`, Argo CD Application, GitHub Actions를 추가한다.
+2. PostgreSQL StatefulSet·Service·5Gi PVC와 MinIO StatefulSet·Service·20Gi PVC·버킷 초기화 Job을 구성한다.
+3. 백엔드 Deployment·Service·Ingress와 `/health/live`, `/health/ready` probe를 구성한다.
+4. 백엔드 런타임 이미지에 Prisma migration 실행 파일을 포함하고 PreSync migration Job을 연결한다.
+5. 프론트엔드 저장소에 프로덕션 Dockerfile, Kubernetes Deployment·Service·Ingress, GitHub Actions, Argo CD Application을 추가한다.
+6. 프론트 빌드 환경을 `https://api.iwtc.ddongmy.com/`으로 바꾸고 백엔드 CORS를 `https://iwtc.ddongmy.com`으로 설정한다.
+7. GHCR 이미지가 비공개이면 K3s에 image pull Secret을 등록한다.
+8. Argo CD로 백엔드 인프라부터 동기화한 뒤 프론트엔드를 배포하고 회원가입·로그인·게임·이미지 업로드를 검증한다.
+9. 안정화 후 PostgreSQL `pg_dump`와 MinIO 객체를 Cloudflare R2 같은 외부 저장소로 보내는 CronJob, 보존 정책, 실제 복구 테스트를 추가한다.
+
+현재 로컬 Mac에는 Kubernetes current context가 설정되어 있지 않아 클러스터 상태를 직접 조회하지 못했다. 실제 배포 적용과 검증은 홈서버 kubeconfig를 연결하거나 홈서버에서 명령을 실행해야 한다.
 
 ## 12. 새 작업을 시작할 때 전달할 내용
 
 새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
 
-> `iwtc-backend-nest/HANDOFF.md`와 `CANDIDATE_DELETION_POLICY.md`를 먼저 읽고 이어서 진행해줘. 기존 DB나 회원 데이터는 사용하지 않는다. 다음 단계에서는 `ManageWorldCupContentsService.findAll`의 관리 후보 목록에만 `deletedAt: null` 조건을 추가하고 단위 테스트를 보강해줘. 후보 수정, 댓글, 삭제 API와 프론트엔드는 아직 수정하지 마.
+> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 이어서 진행해줘. 기존 운영 DB나 회원 데이터는 사용하지 않는다. 다음 단계에서는 확정된 K3s/PVC 구조에 따라 백엔드 저장소부터 PostgreSQL, MinIO, NestJS, GitHub Actions, Argo CD 배포 구성을 구현해줘. 운영 Secret 값은 Git에 커밋하지 말고, 기존 `iwtc.code-workspace`도 커밋하지 마.
