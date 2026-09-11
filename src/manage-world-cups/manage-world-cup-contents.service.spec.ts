@@ -275,7 +275,7 @@ describe('ManageWorldCupContentsService', () => {
       worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
       candidate: {
         findFirst: vi.fn().mockResolvedValue({ id: 15, mediaFileId: 25 }),
-        update: vi.fn().mockResolvedValue({ id: 15 }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       mediaFile: { update: vi.fn().mockResolvedValue({ id: 25 }) },
     };
@@ -299,7 +299,7 @@ describe('ManageWorldCupContentsService', () => {
       select: { id: true },
     });
     expect(transaction.candidate.findFirst).toHaveBeenCalledWith({
-      where: { id: 15, worldCupId: 3 },
+      where: { id: 15, worldCupId: 3, deletedAt: null },
       select: { id: true, mediaFileId: true },
     });
     expect(transaction.mediaFile.update).toHaveBeenCalledWith({
@@ -315,20 +315,21 @@ describe('ManageWorldCupContentsService', () => {
         videoPlayDuration: 5,
       },
     });
-    expect(transaction.candidate.update).toHaveBeenCalledWith({
-      where: { id: 15 },
+    expect(transaction.candidate.updateMany).toHaveBeenCalledWith({
+      where: { id: 15, worldCupId: 3, deletedAt: null },
       data: { name: '수정 후보', visibleType: 'PUBLIC' },
-      select: { id: true },
     });
     expect(
       transaction.mediaFile.update.mock.invocationCallOrder[0],
-    ).toBeLessThan(transaction.candidate.update.mock.invocationCallOrder[0]!);
+    ).toBeLessThan(
+      transaction.candidate.updateMany.mock.invocationCallOrder[0]!,
+    );
   });
 
   it('does not look up or update a candidate when the member is not the owner', async () => {
     const transaction = {
       worldCup: { findFirst: vi.fn().mockResolvedValue(null) },
-      candidate: { findFirst: vi.fn(), update: vi.fn() },
+      candidate: { findFirst: vi.fn(), updateMany: vi.fn() },
       mediaFile: { update: vi.fn() },
     };
     const prisma = {
@@ -346,15 +347,15 @@ describe('ManageWorldCupContentsService', () => {
     });
     expect(transaction.candidate.findFirst).not.toHaveBeenCalled();
     expect(transaction.mediaFile.update).not.toHaveBeenCalled();
-    expect(transaction.candidate.update).not.toHaveBeenCalled();
+    expect(transaction.candidate.updateMany).not.toHaveBeenCalled();
   });
 
-  it('does not reveal a missing candidate or one from another world cup', async () => {
+  it('does not reveal a deleted, missing, or another world cup candidate', async () => {
     const transaction = {
       worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
       candidate: {
         findFirst: vi.fn().mockResolvedValue(null),
-        update: vi.fn(),
+        updateMany: vi.fn(),
       },
       mediaFile: { update: vi.fn() },
     };
@@ -372,11 +373,11 @@ describe('ManageWorldCupContentsService', () => {
       message: '월드컵 후보를 찾을 수 없습니다.',
     });
     expect(transaction.candidate.findFirst).toHaveBeenCalledWith({
-      where: { id: 99, worldCupId: 3 },
+      where: { id: 99, worldCupId: 3, deletedAt: null },
       select: { id: true, mediaFileId: true },
     });
     expect(transaction.mediaFile.update).not.toHaveBeenCalled();
-    expect(transaction.candidate.update).not.toHaveBeenCalled();
+    expect(transaction.candidate.updateMany).not.toHaveBeenCalled();
   });
 
   it('does not update a candidate without a linked media file', async () => {
@@ -384,7 +385,7 @@ describe('ManageWorldCupContentsService', () => {
       worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
       candidate: {
         findFirst: vi.fn().mockResolvedValue({ id: 15, mediaFileId: null }),
-        update: vi.fn(),
+        updateMany: vi.fn(),
       },
       mediaFile: { update: vi.fn() },
     };
@@ -402,7 +403,36 @@ describe('ManageWorldCupContentsService', () => {
       message: '미디어 파일을 찾을 수 없습니다.',
     });
     expect(transaction.mediaFile.update).not.toHaveBeenCalled();
-    expect(transaction.candidate.update).not.toHaveBeenCalled();
+    expect(transaction.candidate.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('fails the transaction when the candidate is deleted during an update', async () => {
+    const transaction = {
+      worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
+      candidate: {
+        findFirst: vi.fn().mockResolvedValue({ id: 15, mediaFileId: 25 }),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      mediaFile: { update: vi.fn().mockResolvedValue({ id: 25 }) },
+    };
+    const prisma = {
+      $transaction: (
+        operation: (client: typeof transaction) => Promise<number>,
+      ) => operation(transaction),
+    } as unknown as PrismaService;
+    const service = new ManageWorldCupContentsService(prisma);
+
+    await expect(
+      service.updateOne(7, 3, 15, youtubeCandidateUpdate()),
+    ).rejects.toMatchObject({
+      status: 404,
+      message: '월드컵 후보를 찾을 수 없습니다.',
+    });
+    expect(transaction.mediaFile.update).toHaveBeenCalledOnce();
+    expect(transaction.candidate.updateMany).toHaveBeenCalledWith({
+      where: { id: 15, worldCupId: 3, deletedAt: null },
+      data: { name: '수정 후보', visibleType: 'PUBLIC' },
+    });
   });
 
   it('returns active owned contents in management order with derived scores and ranks', async () => {

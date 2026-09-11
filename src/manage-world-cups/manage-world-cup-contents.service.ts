@@ -114,7 +114,7 @@ export class ManageWorldCupContentsService {
       }
 
       const candidate = await transaction.candidate.findFirst({
-        where: { id: contentsId, worldCupId },
+        where: { id: contentsId, worldCupId, deletedAt: null },
         select: { id: true, mediaFileId: true },
       });
       if (!candidate) {
@@ -137,16 +137,18 @@ export class ManageWorldCupContentsService {
           videoPlayDuration: request.videoPlayDuration,
         },
       });
-      const updatedCandidate = await transaction.candidate.update({
-        where: { id: candidate.id },
+      const updateResult = await transaction.candidate.updateMany({
+        where: { id: candidate.id, worldCupId, deletedAt: null },
         data: {
           name: request.contentsName,
           visibleType: request.visibleType,
         },
-        select: { id: true },
       });
+      if (updateResult.count === 0) {
+        throw new NotFoundException('월드컵 후보를 찾을 수 없습니다.');
+      }
 
-      return updatedCandidate.id;
+      return candidate.id;
     });
   }
 
