@@ -6,6 +6,12 @@ export interface Environment {
   DATABASE_URL: string;
   CORS_ORIGINS: string[];
   MEDIA_PUBLIC_BASE_URL: string;
+  S3_ENDPOINT: string;
+  S3_REGION: string;
+  S3_BUCKET: string;
+  S3_ACCESS_KEY_ID: string;
+  S3_SECRET_ACCESS_KEY: string;
+  S3_FORCE_PATH_STYLE: boolean;
   JWT_ACCESS_SECRET: string;
   JWT_REFRESH_SECRET: string;
   JWT_ACCESS_TTL_SECONDS: number;
@@ -47,6 +53,38 @@ export function validateEnvironment(
     throw new Error('운영 MEDIA_PUBLIC_BASE_URL은 HTTPS URL이어야 합니다.');
   }
 
+  const s3Endpoint = String(
+    raw.S3_ENDPOINT ?? (nodeEnv === 'production' ? '' : 'http://localhost:9000'),
+  ).replace(/\/+$/, '');
+  if (!/^https?:\/\//.test(s3Endpoint)) {
+    throw new Error('S3_ENDPOINT는 유효한 HTTP(S) URL이어야 합니다.');
+  }
+  if (nodeEnv === 'production' && !s3Endpoint.startsWith('https://')) {
+    throw new Error('운영 S3_ENDPOINT는 HTTPS URL이어야 합니다.');
+  }
+
+  const s3Region = String(raw.S3_REGION ?? 'us-east-1').trim();
+  const s3Bucket = String(raw.S3_BUCKET ?? 'iwtc').trim();
+  const s3AccessKeyId = String(
+    raw.S3_ACCESS_KEY_ID ??
+      (nodeEnv === 'production' ? '' : 'local-minio-access-key'),
+  ).trim();
+  const s3SecretAccessKey = String(
+    raw.S3_SECRET_ACCESS_KEY ??
+      (nodeEnv === 'production' ? '' : 'local-minio-secret-key'),
+  ).trim();
+  if (!s3Region || !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(s3Bucket)) {
+    throw new Error('S3_REGION과 S3_BUCKET 설정을 확인해주세요.');
+  }
+  if (!s3AccessKeyId || !s3SecretAccessKey) {
+    throw new Error('S3 접근 키와 비밀 키가 필요합니다.');
+  }
+
+  const forcePathStyleValue = String(raw.S3_FORCE_PATH_STYLE ?? 'true');
+  if (!['true', 'false'].includes(forcePathStyleValue)) {
+    throw new Error('S3_FORCE_PATH_STYLE은 true 또는 false여야 합니다.');
+  }
+
   const jwtAccessSecret = String(raw.JWT_ACCESS_SECRET ?? '');
   const jwtRefreshSecret = String(raw.JWT_REFRESH_SECRET ?? '');
   if (jwtAccessSecret.length < 32 || jwtRefreshSecret.length < 32) {
@@ -77,6 +115,12 @@ export function validateEnvironment(
     DATABASE_URL: databaseUrl,
     CORS_ORIGINS: corsOrigins,
     MEDIA_PUBLIC_BASE_URL: mediaPublicBaseUrl,
+    S3_ENDPOINT: s3Endpoint,
+    S3_REGION: s3Region,
+    S3_BUCKET: s3Bucket,
+    S3_ACCESS_KEY_ID: s3AccessKeyId,
+    S3_SECRET_ACCESS_KEY: s3SecretAccessKey,
+    S3_FORCE_PATH_STYLE: forcePathStyleValue === 'true',
     JWT_ACCESS_SECRET: jwtAccessSecret,
     JWT_REFRESH_SECRET: jwtRefreshSecret,
     JWT_ACCESS_TTL_SECONDS: jwtAccessTtlSeconds,
