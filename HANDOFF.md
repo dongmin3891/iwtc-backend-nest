@@ -19,8 +19,8 @@
 
 | 용도               | 저장소                                                 | 기준 브랜치                 | 기능 기준 커밋 |
 | ------------------ | ------------------------------------------------------ | --------------------------- | -------------- |
-| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `c03a33d`      |
-| 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `99be22b`      |
+| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `5868aa2`      |
+| 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `43cc72a`      |
 | 기존 Spring 참고용 | `https://github.com/dongmin3891/iwtc-backend-new.git`  | `codex/nest-migration-plan` | `3703d2d`      |
 
 신규 개발 코드는 `iwtc-backend-nest`에 작성한다. `iwtc-backend-new`를 신규 서버로 배포하지 않는다.
@@ -302,7 +302,7 @@ npm test
 npm run build
 ```
 
-마지막 작업 기준으로 프론트 타입 검사, 테스트 65개, 린트와 프로덕션 빌드가 통과했다. 기존 및 저장소 이미지 표시용 `<img>`와 관련된 Next.js 린트 경고 4건이 있으나 실패는 아니다. `npm ci`에서 기존 의존성 취약점이 보고되었으며, 별도 검토 없이 강제 자동 수정하지 않는다.
+마지막 작업 기준으로 프론트 타입 검사, 테스트 65개, 린트와 프로덕션 빌드가 통과했다. 기존 및 저장소 이미지 표시용 `<img>`와 관련된 Next.js 린트 경고 4건이 있으나 실패는 아니다. 운영 배포 후 Next.js standalone 이미지에 Alpine용 `sharp` 네이티브 런타임이 누락된 문제를 발견했고, Docker runtime stage에 `sharp`, `@img`와 필요한 런타임 의존성을 명시적으로 복사하도록 수정했다. 수정 컨테이너에서 `/api/health`와 `/_next/image` 요청이 모두 HTTP 200인 것을 확인했고, 운영 주소에서도 이미지 최적화 요청을 네 번 확인해 모두 HTTP 200이었다. 수정 커밋은 프론트 `16d6a1a`, 자동 배포 커밋은 `43cc72a`다. `npm ci`에서 기존 의존성 취약점이 보고되었으며, 별도 검토 없이 강제 자동 수정하지 않는다.
 
 ## 10. 참고 문서
 
@@ -311,12 +311,14 @@ npm run build
 - `iwtc-backend-new/API_CONTRACT.md`
 - `iwtc-backend-new/BACKEND_MIGRATION_PLAN.md`
 - `iwtc-backend-nest/CANDIDATE_DELETION_POLICY.md`
+- Notion `사이드 프로젝트 / 이상형월드컵 / 이상형 월드컵 서비스 / IWTC 백엔드·인프라 아키텍처`
+  - `https://app.notion.com/p/3d8151dc9c7281a0ba83e41b0ca35bca`
 
 기존 Spring 참고 문서 두 개의 하단 진행 체크리스트 일부는 현재 구현보다 오래된 상태다. 실제 완료 여부는 이 문서와 신규 NestJS 저장소의 `main` 브랜치를 우선 기준으로 판단한다.
 
 ## 11. 다음 작업
 
-후보 생성·수정·삭제와 실제 S3 호환 이미지 업로드까지 완료되었다. `ddongmy-os`의 GitOps 흐름을 따르는 백엔드와 프론트엔드 배포 기반도 구현했다. 양쪽 GitHub Actions에서 검증, GHCR 이미지 push, Deployment의 SHA 태그 갱신, bot commit까지 성공했다. 프론트는 standalone Docker 컨테이너의 `/api/health` 응답도 실제로 확인했다.
+후보 생성·수정·삭제와 실제 S3 호환 이미지 업로드까지 완료되었다. `ddongmy-os`의 GitOps 흐름을 따르는 백엔드와 프론트엔드 배포 기반을 구현했고 홈서버 K3s 운영 배포까지 완료했다. 양쪽 GitHub Actions에서 검증, GHCR 이미지 push, Deployment의 SHA 태그 갱신, bot commit이 성공했으며 Argo CD가 이를 실제 클러스터에 자동 반영한다.
 
 확정된 운영 구조는 다음과 같다.
 
@@ -335,28 +337,38 @@ K3s / namespace: iwtc
 ```
 
 - 프론트엔드, 백엔드, PostgreSQL, MinIO를 모두 홈서버 K3s에서 운영한다.
-- K3s 기본 `local-path` StorageClass를 전제로 시작하되, 실제 적용 전 홈서버에서 `kubectl get storageclass`로 확인한다.
-- PostgreSQL과 MinIO는 각각 단일 replica StatefulSet으로 시작하고 PVC에 데이터를 보존한다.
+- K3s 노드는 `dongdong` 한 대이며 Ubuntu 24.04, K3s v1.36.4, containerd 2.3.4를 사용한다. 노드 내부 IP는 `192.168.219.200`이다.
+- K3s 기본 `local-path` StorageClass, Traefik 기본 IngressClass, cert-manager의 `letsencrypt-prod` ClusterIssuer가 준비되어 있고 실제 배포에서 정상 동작했다.
+- Frontend Deployment와 Backend Deployment는 각각 2 replicas이며 모두 Ready 상태를 확인했다.
+- PostgreSQL과 MinIO는 각각 단일 replica StatefulSet으로 실행하고 PVC에 데이터를 보존한다. PostgreSQL PVC 5Gi와 MinIO PVC 20Gi는 모두 Bound 상태를 확인했다.
 - PVC는 Pod 재시작에는 안전하지만 홈서버 디스크 장애까지 보호하지 않으므로 외부 백업이 필수다.
 - 운영 Secret은 Git에 커밋하지 않고 `iwtc` namespace의 Kubernetes Secret으로 주입한다.
 - MinIO 관리 콘솔은 외부에 공개하지 않고 S3 API만 `media.iwtc.ddongmy.com`으로 노출한다.
 - `iwtc` 버킷은 초기화 Job으로 만들고 이미지 다운로드만 공개한다.
-- Prisma migration은 여러 백엔드 Pod가 동시에 실행하지 않도록 Argo CD `PreSync` Job으로 수행한다.
-- TLS는 세 서브도메인을 포함하는 인증서 또는 `*.ddongmy.com` wildcard 인증서가 필요하다.
+- Prisma migration은 여러 백엔드 Pod가 동시에 실행하지 않도록 Argo CD Sync Hook Job으로 수행한다.
+- MinIO 초기화 Job과 Prisma migration Job은 실제 첫 배포에서 모두 Complete 상태를 확인했다.
+- Cloudflare 권한 DNS에 `iwtc`, `api.iwtc`, `media.iwtc` A 레코드를 만들고 프록시를 끈 DNS only 상태로 공인 IP에 연결했다. 도메인 등록 업체의 DNS 화면은 현재 권한 DNS가 아니므로 레코드는 Cloudflare에서 관리해야 한다.
+- cert-manager가 프론트와 백엔드 인증서를 발급했으며 두 Certificate 모두 Ready 상태를 확인했다.
+- 운영 URL `https://iwtc.ddongmy.com`, 백엔드 live/ready, Swagger, MinIO health가 외부에서 모두 HTTP 200인 것을 확인했다.
+- 운영 환경에서 회원가입, 로그인, 게임과 이미지 업로드 사용자 흐름을 검증했다.
+- PostgreSQL과 MinIO 관리 포트는 외부에 공개하지 않는다. Swagger는 현재 외부 공개 상태다.
 
-다음 순서는 다음과 같다.
+배포 단계 1~5는 모두 완료되었다. 다음 순서는 다음과 같다.
 
-1. GitHub Packages 화면에서 새 `iwtc-frontend-new` 컨테이너 패키지도 Public으로 변경한다.
-2. 홈서버에서 백엔드 `k8s/README.md`의 안내대로 `iwtc-secrets`를 생성한다. 실제 Secret 값은 Git이나 HANDOFF에 기록하지 않는다.
-3. 홈서버에서 백엔드와 프론트 Argo CD Application을 차례로 등록한다.
-4. PostgreSQL·MinIO PVC, 인증서, migration Job, API와 프론트 Pod가 Ready인지 확인한다.
-5. 배포된 주소에서 회원가입·로그인·게임·이미지 업로드를 검증한다.
-6. 안정화 후 PostgreSQL `pg_dump`와 MinIO 객체를 Cloudflare R2 같은 외부 저장소로 보내는 CronJob, 보존 정책, 실제 복구 테스트를 추가한다.
+1. Cloudflare R2에 IWTC 백업 전용 버킷을 만든다.
+2. 버킷 범위로 제한한 R2 백업 전용 API 토큰을 만들고 실제 값은 Git, HANDOFF, Notion에 기록하지 않는다.
+3. R2 endpoint, access key, secret key, bucket 이름을 `iwtc` namespace의 별도 Kubernetes Secret으로 주입한다.
+4. PostgreSQL `pg_dump` 결과를 압축해 R2로 보내는 Kubernetes CronJob을 추가한다.
+5. MinIO `iwtc` 버킷의 객체를 R2로 동기화하는 Kubernetes CronJob을 추가한다.
+6. DB dump 보존 기간과 R2 lifecycle 정책을 정한다.
+7. 새 임시 PostgreSQL과 MinIO 환경에 백업을 실제 복원하는 리허설을 하고 절차를 문서화한다.
+8. 이후 Pod 상태, 인증서 만료, PVC 사용량과 백업 실패를 감지하는 모니터링·알림을 구성한다.
+9. 운영 공개 전 rate limit, 댓글 스팸 방지와 Swagger 공개 범위를 검토한다.
 
-현재 로컬 Mac에는 Kubernetes current context가 설정되어 있지 않아 클러스터 상태를 직접 조회하지 못했다. 실제 배포 적용과 검증은 홈서버 kubeconfig를 연결하거나 홈서버에서 명령을 실행해야 한다.
+현재 로컬 Mac에는 Kubernetes current context가 설정되어 있지 않다. 실제 클러스터 조회와 Secret 생성은 홈서버에서 `sudo k3s kubectl`로 실행해야 한다.
 
 ## 12. 새 작업을 시작할 때 전달할 내용
 
 새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
 
-> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 이어서 진행해줘. 기존 운영 DB나 회원 데이터는 사용하지 않는다. 백엔드와 프론트의 K3s·PostgreSQL·MinIO·GitHub Actions·Argo CD 배포 파일 및 GHCR 이미지 생성은 완료되었다. 다음 단계에서는 사용자가 홈서버에 `iwtc-secrets`를 생성하고 두 Argo CD Application을 등록할 수 있도록 안내한 뒤 실제 배포 상태와 브라우저 흐름을 검증해줘. 운영 Secret 값과 기존 `iwtc.code-workspace`는 커밋하지 마.
+> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 이어서 진행해줘. 기존 운영 DB나 회원 데이터는 사용하지 않는다. 백엔드, 프론트엔드, PostgreSQL, MinIO의 홈서버 K3s 배포와 DNS, TLS, Argo CD 자동 동기화, 운영 사용자 흐름 검증까지 완료되었다. 다음 단계는 PostgreSQL `pg_dump`와 MinIO 객체를 Cloudflare R2로 보내는 외부 백업 구성, 보존 정책, 실제 복원 테스트다. 운영 Secret 값과 기존 `iwtc.code-workspace`는 커밋하지 마.
