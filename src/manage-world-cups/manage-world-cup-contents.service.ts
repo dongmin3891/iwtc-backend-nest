@@ -152,6 +152,28 @@ export class ManageWorldCupContentsService {
     });
   }
 
+  async remove(
+    memberId: number,
+    worldCupId: number,
+    contentsId: number,
+  ): Promise<void> {
+    const ownedWorldCup = await this.prisma.worldCup.findFirst({
+      where: { id: worldCupId, ownerId: memberId },
+      select: { id: true },
+    });
+    if (!ownedWorldCup) {
+      throw new NotFoundException('월드컵을 찾을 수 없습니다.');
+    }
+
+    const result = await this.prisma.candidate.updateMany({
+      where: { id: contentsId, worldCupId, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
+    if (result.count === 0) {
+      throw new NotFoundException('월드컵 후보를 찾을 수 없습니다.');
+    }
+  }
+
   async findAll(
     memberId: number,
     worldCupId: number,

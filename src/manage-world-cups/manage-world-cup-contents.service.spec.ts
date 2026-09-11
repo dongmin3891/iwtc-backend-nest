@@ -435,6 +435,60 @@ describe('ManageWorldCupContentsService', () => {
     });
   });
 
+  it('soft-deletes an active candidate from an owned world cup', async () => {
+    const findFirst = vi.fn().mockResolvedValue({ id: 3 });
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const prisma = {
+      worldCup: { findFirst },
+      candidate: { updateMany },
+    } as unknown as PrismaService;
+    const service = new ManageWorldCupContentsService(prisma);
+
+    await expect(service.remove(7, 3, 15)).resolves.toBeUndefined();
+
+    expect(findFirst).toHaveBeenCalledWith({
+      where: { id: 3, ownerId: 7 },
+      select: { id: true },
+    });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 15, worldCupId: 3, deletedAt: null },
+      data: { deletedAt: expect.any(Date) },
+    });
+  });
+
+  it('does not delete a candidate when the member does not own the world cup', async () => {
+    const updateMany = vi.fn();
+    const prisma = {
+      worldCup: { findFirst: vi.fn().mockResolvedValue(null) },
+      candidate: { updateMany },
+    } as unknown as PrismaService;
+    const service = new ManageWorldCupContentsService(prisma);
+
+    await expect(service.remove(8, 3, 15)).rejects.toMatchObject({
+      status: 404,
+      message: '월드컵을 찾을 수 없습니다.',
+    });
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects deletion of a deleted, missing, or another world cup candidate', async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const prisma = {
+      worldCup: { findFirst: vi.fn().mockResolvedValue({ id: 3 }) },
+      candidate: { updateMany },
+    } as unknown as PrismaService;
+    const service = new ManageWorldCupContentsService(prisma);
+
+    await expect(service.remove(7, 3, 99)).rejects.toMatchObject({
+      status: 404,
+      message: '월드컵 후보를 찾을 수 없습니다.',
+    });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 99, worldCupId: 3, deletedAt: null },
+      data: { deletedAt: expect.any(Date) },
+    });
+  });
+
   it('returns active owned contents in management order with derived scores and ranks', async () => {
     const findFirst = vi.fn().mockResolvedValue({ id: 3 });
     const findMany = vi.fn().mockResolvedValue([
