@@ -1,6 +1,6 @@
 # IWTC 개발 인수인계
 
-마지막 확인일: 2026-09-11
+마지막 확인일: 2026-09-15
 
 이 문서는 다른 컴퓨터나 새 Cursor 환경에서 IWTC 개발을 바로 이어가기 위한 현재 상태와 실행 절차를 정리한다.
 
@@ -19,13 +19,13 @@
 
 | 용도               | 저장소                                                 | 기준 브랜치                 | 기능 기준 커밋 |
 | ------------------ | ------------------------------------------------------ | --------------------------- | -------------- |
-| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `5868aa2`      |
-| 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `43cc72a`      |
+| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `437719c`      |
+| 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `7f9f322`      |
 | 기존 Spring 참고용 | `https://github.com/dongmin3891/iwtc-backend-new.git`  | `codex/nest-migration-plan` | `3703d2d`      |
 
 신규 개발 코드는 `iwtc-backend-nest`에 작성한다. `iwtc-backend-new`를 신규 서버로 배포하지 않는다.
 
-게임 결과·랭킹·미디어·회원·비회원 댓글·회원 인증·회원 댓글 삭제·내 월드컵 목록·상세·생성·관리용 후보 목록·후보 생성·수정·삭제·정적 이미지 업로드와 교체 구현은 각 원격 기준 브랜치에 push되어 있다. `iwtc.code-workspace`는 신규 백엔드 작업 트리에만 있는 로컬 편의 파일이며 커밋하지 않았다.
+게임 결과·랭킹·미디어·회원·비회원 댓글·회원 인증·회원 댓글 삭제·내 월드컵 목록·상세·생성·관리용 후보 목록·후보 생성·수정·삭제·정적 이미지 업로드와 교체 구현, 프론트 홈 화면 1차 디자인 개선은 각 원격 기준 브랜치에 push되어 있다. `iwtc.code-workspace`는 신규 백엔드 작업 트리에만 있는 로컬 편의 파일이며 커밋하지 않았다.
 
 ## 3. 새 환경에 내려받기
 
@@ -302,7 +302,7 @@ npm test
 npm run build
 ```
 
-마지막 작업 기준으로 프론트 타입 검사, 테스트 65개, 린트와 프로덕션 빌드가 통과했다. 기존 및 저장소 이미지 표시용 `<img>`와 관련된 Next.js 린트 경고 4건이 있으나 실패는 아니다. 운영 배포 후 Next.js standalone 이미지에 Alpine용 `sharp` 네이티브 런타임이 누락된 문제를 발견했고, Docker runtime stage에 `sharp`, `@img`와 필요한 런타임 의존성을 명시적으로 복사하도록 수정했다. 수정 컨테이너에서 `/api/health`와 `/_next/image` 요청이 모두 HTTP 200인 것을 확인했고, 운영 주소에서도 이미지 최적화 요청을 네 번 확인해 모두 HTTP 200이었다. 수정 커밋은 프론트 `16d6a1a`, 자동 배포 커밋은 `43cc72a`다. `npm ci`에서 기존 의존성 취약점이 보고되었으며, 별도 검토 없이 강제 자동 수정하지 않는다.
+마지막 작업 기준으로 프론트 타입 검사, 테스트 65개, 린트와 프로덕션 빌드가 통과했다. 기존 및 저장소 이미지 표시용 `<img>`와 관련된 Next.js 린트 경고 4건이 있으나 실패는 아니다. 홈 화면 1차 디자인 개선에서는 공통 색상·배경, 반응형 헤더, 히어로, 검색·기간·정렬 필터와 월드컵 카드를 새 디자인으로 교체했고 좁은 화면 재배치도 브라우저에서 확인했다. 이 변경은 프론트 `7f9f322`에 push되어 있다. 실제 모바일 User-Agent에는 기존 `MobileView` 차단 화면이 계속 표시되므로 모바일 게임 지원을 완료한 것은 아니다. 운영 배포 후 Next.js standalone 이미지에 Alpine용 `sharp` 네이티브 런타임이 누락된 문제를 발견했고, Docker runtime stage에 `sharp`, `@img`와 필요한 런타임 의존성을 명시적으로 복사하도록 수정했다. 수정 컨테이너에서 `/api/health`와 `/_next/image` 요청이 모두 HTTP 200인 것을 확인했고, 운영 주소에서도 이미지 최적화 요청을 네 번 확인해 모두 HTTP 200이었다. 해당 수정 커밋은 프론트 `16d6a1a`, 당시 자동 배포 커밋은 `43cc72a`다. `npm ci`에서 기존 의존성 취약점이 보고되었으며, 별도 검토 없이 강제 자동 수정하지 않는다.
 
 ## 10. 참고 문서
 
@@ -319,6 +319,8 @@ npm run build
 ## 11. 다음 작업
 
 후보 생성·수정·삭제와 실제 S3 호환 이미지 업로드까지 완료되었다. `ddongmy-os`의 GitOps 흐름을 따르는 백엔드와 프론트엔드 배포 기반을 구현했고 홈서버 K3s 운영 배포까지 완료했다. 양쪽 GitHub Actions에서 검증, GHCR 이미지 push, Deployment의 SHA 태그 갱신, bot commit이 성공했으며 Argo CD가 이를 실제 클러스터에 자동 반영한다.
+
+프론트 디자인 작업은 홈 화면 1차 개선까지 완료했다. 다음 디자인 단위는 `/play-game/[id]`의 게임 진입·라운드 선택 화면만 개선하는 것이다. 기존 API 호출과 게임 진행 로직은 건드리지 않고 정보 구조, 선택 버튼, 로딩·오류 상태를 먼저 정리한다. 실제 대진 화면과 `/play-clear/[...id]` 결과 화면은 그 다음 단계로 각각 분리한다. 전체 모바일 지원은 현재 `MobileView` 차단 정책을 제거하기 전에 각 게임 화면의 반응형 동작을 별도로 검증해야 한다.
 
 확정된 운영 구조는 다음과 같다.
 
@@ -371,4 +373,4 @@ K3s / namespace: iwtc
 
 새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
 
-> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 이어서 진행해줘. 기존 운영 DB나 회원 데이터는 사용하지 않는다. 백엔드, 프론트엔드, PostgreSQL, MinIO의 홈서버 K3s 배포와 DNS, TLS, Argo CD 자동 동기화, 운영 사용자 흐름 검증까지 완료되었다. 다음 단계는 PostgreSQL `pg_dump`와 MinIO 객체를 Cloudflare R2로 보내는 외부 백업 구성, 보존 정책, 실제 복원 테스트다. 운영 Secret 값과 기존 `iwtc.code-workspace`는 커밋하지 마.
+> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 이어서 진행해줘. 기존 운영 DB나 회원 데이터는 사용하지 않는다. 백엔드, 프론트엔드, PostgreSQL, MinIO의 홈서버 K3s 배포와 DNS, TLS, Argo CD 자동 동기화, 운영 사용자 흐름 검증까지 완료되었다. 프론트 홈 디자인 1차 개선은 `7f9f322`까지 완료했으며 다음 디자인 단위는 `/play-game/[id]`의 게임 진입·라운드 선택 화면이다. 인프라 다음 단계는 PostgreSQL `pg_dump`와 MinIO 객체를 Cloudflare R2로 보내는 외부 백업 구성, 보존 정책, 실제 복원 테스트다. 운영 Secret 값과 기존 `iwtc.code-workspace`는 커밋하지 마.
