@@ -16,6 +16,8 @@ export interface Environment {
   JWT_REFRESH_SECRET: string;
   JWT_ACCESS_TTL_SECONDS: number;
   JWT_REFRESH_TTL_SECONDS: number;
+  IWTC_AUTOMATION_TOKEN?: string;
+  IWTC_AUTOMATION_MEMBER_ID?: number;
 }
 
 export function validateEnvironment(
@@ -108,6 +110,21 @@ export function validateEnvironment(
     );
   }
 
+  const automationToken = String(raw.IWTC_AUTOMATION_TOKEN ?? '').trim();
+  const automationMemberIdRaw = String(raw.IWTC_AUTOMATION_MEMBER_ID ?? '').trim();
+  const automationConfigured = Boolean(automationToken || automationMemberIdRaw);
+  let automationMemberId: number | undefined;
+
+  if (automationConfigured) {
+    if (automationToken.length < 32) {
+      throw new Error('IWTC_AUTOMATION_TOKEN은 32자 이상이어야 합니다.');
+    }
+    automationMemberId = Number(automationMemberIdRaw);
+    if (!Number.isInteger(automationMemberId) || automationMemberId < 1) {
+      throw new Error('IWTC_AUTOMATION_MEMBER_ID는 1 이상의 정수여야 합니다.');
+    }
+  }
+
   return {
     ...raw,
     NODE_ENV: nodeEnv as Environment['NODE_ENV'],
@@ -125,5 +142,11 @@ export function validateEnvironment(
     JWT_REFRESH_SECRET: jwtRefreshSecret,
     JWT_ACCESS_TTL_SECONDS: jwtAccessTtlSeconds,
     JWT_REFRESH_TTL_SECONDS: jwtRefreshTtlSeconds,
+    ...(automationConfigured
+      ? {
+          IWTC_AUTOMATION_TOKEN: automationToken,
+          IWTC_AUTOMATION_MEMBER_ID: automationMemberId,
+        }
+      : {}),
   };
 }
