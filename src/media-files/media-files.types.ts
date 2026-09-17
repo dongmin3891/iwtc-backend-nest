@@ -11,6 +11,11 @@ export interface MediaFileResponse {
   videoStartTime: string | null;
   videoPlayDuration: number | null;
   detailType: MediaDetailType;
+  sourceProvider?: string | null;
+  sourceExternalId?: string | null;
+  sourceUrl?: string | null;
+  sourceAuthor?: string | null;
+  sourceAuthorUrl?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
