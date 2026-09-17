@@ -20,7 +20,7 @@
 | 용도               | 저장소                                                 | 기준 브랜치                 | 기능 기준 커밋 |
 | ------------------ | ------------------------------------------------------ | --------------------------- | -------------- |
 | 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `437719c`      |
-| 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `fe1f47e`      |
+| 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `186d159`      |
 | 기존 Spring 참고용 | `https://github.com/dongmin3891/iwtc-backend-new.git`  | `codex/nest-migration-plan` | `3703d2d`      |
 
 신규 개발 코드는 `iwtc-backend-nest`에 작성한다. `iwtc-backend-new`를 신규 서버로 배포하지 않는다.
@@ -312,6 +312,8 @@ npm run build
 
 공통 `AlertPopup`은 다크 테마 오버레이와 반응형 대화상자로 개편했다. `alertdialog`, 제목·메시지 연결, 열릴 때 확인 버튼 자동 포커스, Tab 포커스 유지, Escape 닫기, 닫힌 뒤 이전 요소 포커스 복원과 본문 스크롤 잠금 해제를 추가했으며 기존 `PopupContext` 호출 방식과 확인 동작은 유지했다. 로그인 필요 알림으로 데스크톱·390px 배치와 키보드 동작을 확인했고 브라우저 오류·경고는 없었다. 이 변경은 프론트 `fe1f47e`에 push되어 있다.
 
+공통 `ConfirmPopup`을 추가하고 내 월드컵 카드의 네이티브 `window.confirm` 삭제 확인을 교체했다. 위험 동작임을 구분하는 다크 테마 대화상자, 취소·삭제 버튼, 제목·메시지 접근성 연결, 안전한 취소 버튼의 초기 포커스, Tab·Shift+Tab 포커스 순환, Escape 취소, 닫힌 뒤 이전 요소 포커스 복원과 본문 스크롤 잠금 해제를 적용했다. 기존 삭제 API 호출, 성공 후 목록 재조회, 로딩·실패 표시는 그대로 유지했다. 모의 API로 데스크톱·390px 배치, 키보드 취소, 삭제 성공 후 빈 목록 전환을 확인했으며 실제 데이터는 삭제하지 않았다. 이 변경은 프론트 `186d159`에 push되어 있다.
+
 ## 10. 참고 문서
 
 기존 Spring 참고 저장소의 다음 문서에 프론트엔드 API 계약과 전체 이전 계획이 정리되어 있다.
@@ -328,7 +330,7 @@ npm run build
 
 후보 생성·수정·삭제와 실제 S3 호환 이미지 업로드까지 완료되었다. `ddongmy-os`의 GitOps 흐름을 따르는 백엔드와 프론트엔드 배포 기반을 구현했고 홈서버 K3s 운영 배포까지 완료했다. 양쪽 GitHub Actions에서 검증, GHCR 이미지 push, Deployment의 SHA 태그 갱신, bot commit이 성공했으며 Argo CD가 이를 실제 클러스터에 자동 반영한다.
 
-프론트 디자인 작업은 홈, 게임, 결과·랭킹·댓글, 로그인·회원가입, 월드컵 생성·수정, 내 월드컵 목록과 공통 알림 팝업까지 완료했다. 다음 디자인 단위는 내 월드컵 카드의 네이티브 `window.confirm` 삭제 확인만 공통 `ConfirmPopup`으로 교체하는 것이다. 삭제 API·재조회·실패 표시 로직은 유지하면서 취소·삭제 버튼, 위험 안내, 자동 포커스·Escape·Tab 동작과 390px 배치를 정리한다. 다른 삭제 화면 통합, 모바일 차단 정책 변경과 기능 수정은 이후 단계로 분리한다. 전체 모바일 지원은 현재 `MobileView` 차단 정책을 제거하기 전에 관리 화면까지 반응형 동작을 별도로 검증해야 한다.
+프론트 디자인 작업은 홈, 게임, 결과·랭킹·댓글, 로그인·회원가입, 월드컵 생성·수정, 내 월드컵 목록과 공통 알림·확인 팝업까지 완료했다. 다음 디자인 단위는 후보 관리의 이미지 후보 카드와 YouTube 후보 카드에서 즉시 실행되는 삭제 동작을 공통 `ConfirmPopup`으로 통일하는 것이다. 새 후보와 저장된 후보의 기존 삭제 상태 추적, 최종 저장 방식과 API 계약은 유지하고, 두 카드의 삭제 문구·취소·확인 동작과 390px 배치만 정리한다. `MobileView` 차단 정책 변경과 다른 기능 수정은 이후 단계로 분리한다. 전체 모바일 지원은 현재 `MobileView` 차단 정책을 제거하기 전에 관리 화면까지 반응형 동작을 별도로 검증해야 한다.
 
 확정된 운영 구조는 다음과 같다.
 
@@ -381,4 +383,4 @@ K3s / namespace: iwtc
 
 새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
 
-> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 이어서 진행해줘. 기존 운영 DB나 회원 데이터는 사용하지 않는다. 백엔드, 프론트엔드, PostgreSQL, MinIO의 홈서버 K3s 배포와 DNS, TLS, Argo CD 자동 동기화, 운영 사용자 흐름 검증까지 완료되었다. 프론트 홈, 게임, 결과·랭킹·댓글, 로그인·회원가입, 월드컵 생성·수정, 내 월드컵 목록과 공통 `AlertPopup` 디자인은 `fe1f47e`까지 완료했다. 다음 디자인 단위는 내 월드컵 삭제의 네이티브 확인창을 공통 `ConfirmPopup`으로 교체하는 것이며 기존 삭제 API·재조회·실패 처리는 유지한다. 인프라 다음 단계는 PostgreSQL `pg_dump`와 MinIO 객체를 Cloudflare R2로 보내는 외부 백업 구성, 보존 정책, 실제 복원 테스트다. 운영 Secret 값과 기존 `iwtc.code-workspace`는 커밋하지 마.
+> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 이어서 진행해줘. 기존 운영 DB나 회원 데이터는 사용하지 않는다. 백엔드, 프론트엔드, PostgreSQL, MinIO의 홈서버 K3s 배포와 DNS, TLS, Argo CD 자동 동기화, 운영 사용자 흐름 검증까지 완료되었다. 프론트 홈, 게임, 결과·랭킹·댓글, 로그인·회원가입, 월드컵 생성·수정, 내 월드컵 목록과 공통 `AlertPopup`·`ConfirmPopup` 디자인은 `186d159`까지 완료했다. 다음 디자인 단위는 이미지·YouTube 후보 카드의 즉시 삭제를 공통 `ConfirmPopup`으로 통일하는 것이며 새 후보와 저장된 후보의 기존 삭제 상태 추적과 최종 저장 방식은 유지한다. 인프라 다음 단계는 PostgreSQL `pg_dump`와 MinIO 객체를 Cloudflare R2로 보내는 외부 백업 구성, 보존 정책, 실제 복원 테스트다. 운영 Secret 값과 기존 `iwtc.code-workspace`는 커밋하지 마.
