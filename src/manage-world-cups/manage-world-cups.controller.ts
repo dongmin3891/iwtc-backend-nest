@@ -5,6 +5,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Put,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -75,5 +76,18 @@ export class ManageWorldCupsController {
       body,
     );
     return success('게임 생성', worldCupId);
+  }
+
+  @Put(':worldCupId')
+  @ApiOperation({ summary: '내 월드컵 기본 정보 수정' })
+  @ApiOkResponse({ description: '월드컵 기본 정보 수정' })
+  @ApiNotFoundResponse({ description: '소유한 월드컵을 찾을 수 없음' })
+  async update(
+    @Param('worldCupId', ParseIntPipe) worldCupId: number,
+    @Body() body: CreateManagedWorldCupDto,
+    @Req() request: Request & AuthenticatedRequest,
+  ): Promise<ApiResponse<null>> {
+    await this.manageWorldCupsService.update(request.member.id, worldCupId, body);
+    return success('월드컵 기본 정보 수정', null);
   }
 }
