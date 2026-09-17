@@ -192,6 +192,7 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 | GET    | `/api/me/game-manage/world-cups`                              | 완료 |
 | GET    | `/api/me/game-manage/world-cups/{worldCupId}`                 | 완료 |
 | POST   | `/api/me/game-manage/world-cups`                              | 완료 |
+| DELETE | `/api/me/game-manage/world-cups/{worldCupId}`                 | 미구현 · 영구 삭제 범위 승인 대기 |
 | GET    | `/api/me/game-contents-manage/world-cups/{worldCupId}/manage-contents` | 완료 |
 | POST   | `/api/me/game-contents-manage/world-cups/{worldCupId}/contents` | 완료 |
 | POST   | `/api/me/game-contents-manage/world-cups/{worldCupId}/contents/static` | 완료 |
@@ -336,6 +337,17 @@ npm run build
 
 후보 생성·수정·삭제와 실제 S3 호환 이미지 업로드까지 완료되었다. `ddongmy-os`의 GitOps 흐름을 따르는 백엔드와 프론트엔드 배포 기반을 구현했고 홈서버 K3s 운영 배포까지 완료했다. 양쪽 GitHub Actions에서 검증, GHCR 이미지 push, Deployment의 SHA 태그 갱신, bot commit이 성공했으며 Argo CD가 이를 실제 클러스터에 자동 반영한다.
 
+### 월드컵 삭제 오류와 미구현 상태
+
+- 2026-09-17 운영에서 `DELETE /api/me/game-manage/world-cups/{worldCupId}` 요청 본문으로 JSON 문자열 `null`이 전송되어, 요청이 컨트롤러에 도달하기 전에 Express/Nest JSON parser가 HTTP 400과 `Unexpected token 'n', "null" is not valid JSON`을 반환했다. 운영 요청에 포함됐던 인증 토큰 값은 이 문서나 Git에 기록하지 않는다.
+- 프론트 `ajaxDelete`가 Axios의 `data` 옵션에 `null`을 전달하고 월드컵·후보 삭제 호출부가 이를 사용한 것이 직접 원인이다. 프론트 작업 브랜치에서는 월드컵·후보·댓글 DELETE 요청에 본문을 보내지 않도록 수정하고 타입 검사, 린트, 테스트 65개와 프로덕션 빌드를 통과했다. 다만 백엔드 endpoint 구현 전에는 월드컵 삭제 기능 완료로 취급하지 않는다.
+- 현재 NestJS `ManageWorldCupsController`에는 월드컵 삭제 endpoint 자체가 없다. 따라서 프론트의 `null` 본문만 제거해 배포하면 파싱 오류는 사라지지만 해당 요청은 HTTP 404가 된다.
+- 기존 계약의 목표는 소유자만 호출할 수 있는 `DELETE /api/me/game-manage/world-cups/{worldCupId}`와 성공 시 본문 없는 HTTP 204다. 다른 회원 소유 또는 존재하지 않는 월드컵은 동일하게 HTTP 404로 처리한다.
+- 화면 문구는 월드컵과 후보를 복구할 수 없는 영구 삭제로 안내하지만, 연결된 후보·댓글·게임 결과·미디어 DB 행과 MinIO 객체까지 지우는 최종 범위는 아직 사용자 승인을 받지 않았으므로 구현하지 않는다.
+- 영구 삭제 승인을 받은 뒤에는 하나의 DB 트랜잭션에서 `GamePlacement` → `Comment` → `GamePlay` → `Candidate` → `WorldCup` 순서로 관계 데이터를 정리한다. 후보가 참조하던 미디어 중 다른 후보가 더 이상 참조하지 않는 고아 `MediaFile`만 삭제 대상으로 확정하고, 공유 미디어는 보존한다.
+- MinIO의 `objectKey`와 `thumbnailObjectKey` 삭제는 DB 트랜잭션이 커밋된 뒤 중복을 제거해 실행한다. 객체 삭제 실패 시 DB 롤백이 불가능하므로 로그와 재시도 정책을 함께 정해야 한다.
+- 구현 후에는 소유자 요청 204와 빈 응답·빈 요청 본문, 미인증 401, 다른 소유자/없는 ID 404, 관계 데이터 삭제, 공유 미디어 보존, 커밋 이후 객체 삭제, 스토리지 정리 실패 처리를 단위·API 통합 테스트로 고정한다.
+
 프론트 디자인 작업은 홈, 게임, 결과·랭킹·댓글, 로그인·회원가입, 월드컵 생성·수정, 내 월드컵 목록과 공통 알림·확인 팝업까지 완료했고 모바일 전역 차단과 후보 카드의 즉시 삭제도 정리했다. 다음 디자인 단위는 실제 모바일 User-Agent에서 공개 사용자 흐름인 홈, 게임 진입·라운드 선택, 1:1 대진과 결과 화면만 회귀 검증하고 발견되는 모바일 레이아웃 문제를 수정하는 것이다. API는 모의 응답을 사용하고 실제 게임 결과·댓글 데이터는 만들지 않는다. 로그인·회원가입과 관리 화면의 모바일 회귀 검증은 그다음 단계로 분리한다.
 
 확정된 운영 구조는 다음과 같다.
@@ -389,4 +401,4 @@ K3s / namespace: iwtc
 
 새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
 
-> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 이어서 진행해줘. 기존 운영 DB나 회원 데이터는 사용하지 않는다. 백엔드, 프론트엔드, PostgreSQL, MinIO의 홈서버 K3s 배포와 DNS, TLS, Argo CD 자동 동기화, 운영 사용자 흐름 검증까지 완료되었다. 프론트 홈, 게임, 결과·랭킹·댓글, 로그인·회원가입, 월드컵 생성·수정, 내 월드컵 목록, 공통 `AlertPopup`·`ConfirmPopup`, 모바일 전역 차단 제거와 후보 카드 삭제 확인은 `727c682`까지 완료했다. 다음 디자인 단위는 실제 모바일 User-Agent에서 홈부터 게임 결과까지 공개 사용자 흐름만 모의 API로 회귀 검증하고 발견되는 모바일 레이아웃 문제를 수정하는 것이다. 인증·관리 화면의 모바일 검증은 이후 단계로 분리한다. 인프라 다음 단계는 PostgreSQL `pg_dump`와 MinIO 객체를 Cloudflare R2로 보내는 외부 백업 구성, 보존 정책, 실제 복원 테스트다. 운영 Secret 값과 기존 `iwtc.code-workspace`는 커밋하지 마.
+> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 이어서 진행해줘. 기존 운영 DB나 회원 데이터는 사용하지 않는다. 백엔드, 프론트엔드, PostgreSQL, MinIO의 홈서버 K3s 배포와 DNS, TLS, Argo CD 자동 동기화, 운영 사용자 흐름 검증까지 완료되었다. 프론트 홈, 게임, 결과·랭킹·댓글, 로그인·회원가입, 월드컵 생성·수정, 내 월드컵 목록, 공통 `AlertPopup`·`ConfirmPopup`, 모바일 전역 차단 제거와 후보 카드 삭제 확인은 `727c682`까지 완료했다. 월드컵 DELETE 요청의 `null` 본문 오류는 확인했고 프론트 작업 브랜치에서 DELETE 본문을 제거했지만, NestJS 월드컵 삭제 endpoint는 아직 없고 관계 데이터·고아 미디어·MinIO 객체를 포함한 영구 삭제 범위 승인을 기다리고 있으므로 백엔드 구현 전에는 기능 완료로 취급하지 마. 승인 후 HTTP 204 계약과 소유권·관계·공유 미디어·스토리지 실패 테스트까지 함께 구현해야 한다. 다음 디자인 단위는 실제 모바일 User-Agent에서 홈부터 게임 결과까지 공개 사용자 흐름만 모의 API로 회귀 검증하고 발견되는 모바일 레이아웃 문제를 수정하는 것이다. 인증·관리 화면의 모바일 검증은 이후 단계로 분리한다. 인프라 다음 단계는 PostgreSQL `pg_dump`와 MinIO 객체를 Cloudflare R2로 보내는 외부 백업 구성, 보존 정책, 실제 복원 테스트다. 운영 Secret 값과 기존 `iwtc.code-workspace`는 커밋하지 마.
