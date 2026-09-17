@@ -44,6 +44,19 @@ export class MediaFilesService {
       videoStartTime: mediaFile.videoStartTime,
       videoPlayDuration: mediaFile.videoPlayDuration,
       detailType: mediaFile.detailType,
+      ...(mediaFile.sourceProvider ||
+      mediaFile.sourceExternalId ||
+      mediaFile.sourceUrl ||
+      mediaFile.sourceAuthor ||
+      mediaFile.sourceAuthorUrl
+        ? {
+            sourceProvider: mediaFile.sourceProvider,
+            sourceExternalId: mediaFile.sourceExternalId,
+            sourceUrl: mediaFile.sourceUrl,
+            sourceAuthor: mediaFile.sourceAuthor,
+            sourceAuthorUrl: mediaFile.sourceAuthorUrl,
+          }
+        : {}),
       createdAt: mediaFile.createdAt,
       updatedAt: mediaFile.updatedAt,
     };
