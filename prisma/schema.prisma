@@ -76,6 +76,11 @@ model MediaFile {
   originalName       String?         @map("original_name") @db.VarChar(255)
   videoStartTime     String?         @map("video_start_time") @db.VarChar(5)
   videoPlayDuration  Int?            @map("video_play_duration")
+  sourceProvider     String?         @map("source_provider") @db.VarChar(50)
+  sourceExternalId   String?         @map("source_external_id") @db.VarChar(100)
+  sourceUrl          String?         @map("source_url") @db.VarChar(2048)
+  sourceAuthor       String?         @map("source_author") @db.VarChar(200)
+  sourceAuthorUrl    String?         @map("source_author_url") @db.VarChar(2048)
   createdAt          DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
   candidates         Candidate[]

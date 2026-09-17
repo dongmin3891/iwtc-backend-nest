@@ -13,8 +13,9 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiCreatedResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { success, type ApiResponse } from '../common/api-response.js';
 import { AutomationGuard } from './automation.guard.js';
+import { AutomationWorldCupAttributionService } from './automation-world-cup-attribution.service.js';
+import { CreateAutomationStaticWorldCupContentDto } from './dto/create-automation-static-world-cup-content.dto.js';
 import { CreateAutomationWorldCupDto } from './dto/create-automation-world-cup.dto.js';
-import { CreateStaticWorldCupContentDto } from './dto/create-static-world-cup-content.dto.js';
 import { ManageWorldCupContentsService } from './manage-world-cup-contents.service.js';
 import { ManageWorldCupsService } from './manage-world-cups.service.js';
 import {
@@ -32,6 +33,7 @@ export class AutomationWorldCupsController {
   constructor(
     private readonly manageWorldCupsService: ManageWorldCupsService,
     private readonly manageWorldCupContentsService: ManageWorldCupContentsService,
+    private readonly attributionService: AutomationWorldCupAttributionService,
     config: ConfigService,
   ) {
     this.memberId = config.get<number>('IWTC_AUTOMATION_MEMBER_ID') ?? 0;
@@ -59,7 +61,7 @@ export class AutomationWorldCupsController {
   @ApiCreatedResponse({ description: '비공개 이미지 후보 생성' })
   async createStaticCandidate(
     @Param('worldCupId', ParseIntPipe) worldCupId: number,
-    @Body() body: CreateStaticWorldCupContentDto,
+    @Body() body: CreateAutomationStaticWorldCupContentDto,
     @UploadedFile(StaticImageFilePipe) file: UploadedStaticImage,
   ): Promise<ApiResponse<number>> {
     const candidateId =
@@ -72,6 +74,20 @@ export class AutomationWorldCupsController {
         },
         file,
       );
+
+    await this.attributionService.saveCandidateAttribution(
+      this.memberId,
+      worldCupId,
+      candidateId,
+      {
+        sourceProvider: body.sourceProvider,
+        sourceExternalId: body.sourceExternalId,
+        sourceUrl: body.sourceUrl,
+        sourceAuthor: body.sourceAuthor,
+        sourceAuthorUrl: body.sourceAuthorUrl,
+      },
+    );
+
     return success('자동화 비공개 이미지 후보 생성', candidateId);
   }
 }
