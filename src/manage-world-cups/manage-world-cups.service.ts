@@ -87,6 +87,30 @@ export class ManageWorldCupsService {
     return worldCup.id;
   }
 
+  async update(
+    memberId: number,
+    worldCupId: number,
+    request: CreateManagedWorldCupDto,
+  ): Promise<void> {
+    const worldCup = await this.prisma.worldCup.findFirst({
+      where: { id: worldCupId, ownerId: memberId },
+      select: { id: true },
+    });
+
+    if (!worldCup) {
+      throw new NotFoundException('월드컵을 찾을 수 없습니다.');
+    }
+
+    await this.prisma.worldCup.update({
+      where: { id: worldCupId },
+      data: {
+        title: request.title,
+        description: request.description ?? '',
+        visibleType: request.visibleType,
+      },
+    });
+  }
+
   async publishAutomationDraft(
     memberId: number,
     worldCupId: number,
