@@ -173,6 +173,11 @@ export class ManageWorldCupContentsService {
                 originalName: file.originalname,
                 videoStartTime: null,
                 videoPlayDuration: null,
+                sourceProvider: null,
+                sourceExternalId: null,
+                sourceUrl: null,
+                sourceAuthor: null,
+                sourceAuthorUrl: null,
               },
             });
           }

@@ -1,6 +1,6 @@
 # IWTC 개발 인수인계
 
-마지막 확인일: 2026-09-16
+마지막 확인일: 2026-09-17
 
 이 문서는 다른 컴퓨터나 새 Cursor 환경에서 IWTC 개발을 바로 이어가기 위한 현재 상태와 실행 절차를 정리한다.
 
@@ -203,7 +203,9 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 
 게임 결과는 `GamePlay`와 `GamePlacement`에 저장한다. `playId`는 UUID v4이며 같은 결과의 재요청은 기존 결과를 반환하고, 같은 `playId`를 다른 결과에 사용하면 HTTP 409를 반환한다. 랭킹은 후보별 누적 점수로 계산하고 동점 후보에게 같은 순위를 부여한다.
 
-미디어는 PostgreSQL에 메타데이터와 object key만 저장한다. 정적 파일 응답은 `MEDIA_PUBLIC_BASE_URL` 기반의 공개 URL이며 `size=divide2`에 썸네일 key가 없으면 원본 URL로 대체한다. 로컬 Compose에는 MinIO와 버킷 초기화 구성이 포함되어 있다. 정적 이미지는 JPEG·PNG·GIF, 최대 10MB를 허용한다. 생성 시 업로드 후 DB 저장에 실패하면 새 객체를 지우고, 교체 시 DB 트랜잭션이 성공한 뒤 이전 객체를 지운다.
+미디어는 PostgreSQL에 메타데이터와 object key만 저장한다. 정적 파일 응답은 `MEDIA_PUBLIC_BASE_URL` 기반의 공개 URL이며 `size=divide2`에 썸네일 key가 없으면 원본 URL로 대체한다. 로컬 Compose에는 MinIO와 버킷 초기화 구성이 포함되어 있다. 정적 이미지는 JPEG·PNG·GIF, 최대 10MB를 허용한다. 생성 시 업로드 후 DB 저장에 실패하면 새 객체를 지우고, 교체 시 DB 트랜잭션이 성공한 뒤 이전 객체를 지운다. 기존 Pexels 이미지를 일반 업로드 파일로 교체할 때는 이전 사진의 `sourceProvider`, `sourceExternalId`, `sourceUrl`, `sourceAuthor`, `sourceAuthorUrl`을 모두 `null`로 초기화한다. 파일을 교체하지 않고 후보명·공개 여부만 수정할 때는 기존 출처 정보를 유지한다.
+
+자동화용 Pexels 후보 요청은 `sourceProvider: PEXELS`와 5개 출처 필드를 요구한다. 사진 URL은 HTTPS `pexels.com/photo/{photo-slug}` 형식, 작가 URL은 HTTPS `pexels.com/@{author-slug}` 형식만 허용한다. `www`는 선택적으로 허용하지만 다른 호스트, HTTP, Pexels 검색·일반 페이지, 사용자 정보가 삽입된 위장 URL은 거부한다. URL 앞뒤 공백은 검증 전에 제거한다.
 
 댓글은 회원과 비회원 모두 작성할 수 있다. 비회원은 닉네임이 필수이며 `memberId`를 `null`로 저장한다. 회원은 프론트가 전달한 `access-token`으로 확인한 서버의 `memberId`와 닉네임을 저장하므로 요청 닉네임을 생략할 수 있고, 요청에 닉네임이 있어도 신뢰하지 않는다. 토큰 헤더가 없을 때만 비회원으로 처리하며 유효하지 않은 토큰을 보내면 HTTP 401을 반환한다. 본문은 공백 제거 후 1–30자, 비회원 닉네임은 1–50자로 검증한다. 작성 대상 후보가 공개 상태이며 요청 월드컵에 속하는지 확인한다. 목록은 `createdAt DESC, id DESC`로 안정적으로 정렬하며 `offset`은 건너뛸 행 수, `limit`은 조회 수다. 기본 `limit`은 20이고 최대 100이다. 회원 댓글 삭제는 작성 회원 본인만 가능하며 행을 제거하지 않고 `deletedAt`을 기록한다. 미인증 요청은 HTTP 401, 다른 회원 또는 비회원 댓글 삭제 요청은 HTTP 403, 없거나 이미 삭제된 댓글은 HTTP 404를 반환한다. 목록에서는 삭제된 댓글을 제외한다. 운영 공개 전 rate limit과 스팸 방지 정책이 필요하다.
 
@@ -291,7 +293,7 @@ npm run test:e2e
 npm run build
 ```
 
-마지막 작업 기준으로 린트와 빌드, 단위 테스트 142개가 통과했다. API 통합 테스트는 정적 이미지 생성·선택적 교체를 포함해 57개가 통과했다. 검증 명령은 프로젝트 기준 Node.js 24.19에서 실행해야 한다.
+마지막 작업 기준으로 린트와 빌드, 단위 테스트 151개, API 통합 테스트 57개가 통과했다. Pexels URL 검증과 일반 이미지 교체 시 출처 5개 필드 초기화를 단위 테스트로 확인했다. 검증 명령은 프로젝트 기준 Node.js 24.19에서 실행해야 한다.
 
 프론트엔드:
 

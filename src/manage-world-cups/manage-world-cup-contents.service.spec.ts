@@ -139,6 +139,11 @@ describe('ManageWorldCupContentsService', () => {
         originalName: 'new.gif',
         videoStartTime: null,
         videoPlayDuration: null,
+        sourceProvider: null,
+        sourceExternalId: null,
+        sourceUrl: null,
+        sourceAuthor: null,
+        sourceAuthorUrl: null,
       },
     });
     expect(objectStorage.deleteObject).toHaveBeenCalledWith(
