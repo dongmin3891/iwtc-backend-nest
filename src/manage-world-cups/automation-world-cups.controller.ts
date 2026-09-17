@@ -17,7 +17,10 @@ import { AutomationWorldCupAttributionService } from './automation-world-cup-att
 import { CreateAutomationStaticWorldCupContentDto } from './dto/create-automation-static-world-cup-content.dto.js';
 import { CreateAutomationWorldCupDto } from './dto/create-automation-world-cup.dto.js';
 import { ManageWorldCupContentsService } from './manage-world-cup-contents.service.js';
-import { ManageWorldCupsService } from './manage-world-cups.service.js';
+import {
+  ManageWorldCupsService,
+  type PublishedAutomationWorldCup,
+} from './manage-world-cups.service.js';
 import {
   MAX_STATIC_IMAGE_SIZE,
   StaticImageFilePipe,
@@ -89,5 +92,19 @@ export class AutomationWorldCupsController {
     );
 
     return success('자동화 비공개 이미지 후보 생성', candidateId);
+  }
+
+  @Post(':worldCupId/publish')
+  @ApiOperation({ summary: '자동화 월드컵 출처 검증 후 공개' })
+  @ApiCreatedResponse({ description: '월드컵 및 후보 공개 완료' })
+  async publishWorldCup(
+    @Param('worldCupId', ParseIntPipe) worldCupId: number,
+  ): Promise<ApiResponse<PublishedAutomationWorldCup>> {
+    const result = await this.manageWorldCupsService.publishAutomationDraft(
+      this.memberId,
+      worldCupId,
+    );
+
+    return success('자동화 월드컵 공개', result);
   }
 }
