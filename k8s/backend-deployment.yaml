@@ -24,7 +24,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: backend
-          image: ghcr.io/dongmin3891/iwtc-backend-nest:a1bf55dc30460fd9d67cbf1e596067212662323b
+          image: ghcr.io/dongmin3891/iwtc-backend-nest:26d4dc400375affde20deb0062beb4a96601ccc2
           imagePullPolicy: Always
           securityContext:
             runAsNonRoot: true
