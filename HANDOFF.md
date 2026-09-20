@@ -19,8 +19,8 @@
 
 | 용도               | 저장소                                                 | 기준 브랜치                 | 기능 기준 커밋 |
 | ------------------ | ------------------------------------------------------ | --------------------------- | -------------- |
-| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `4b2bc49`      |
-| 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `6abdd2e`      |
+| 신규 백엔드        | `https://github.com/dongmin3891/iwtc-backend-nest.git` | `main`                      | `f17a2e0`      |
+| 프론트엔드         | `https://github.com/dongmin3891/iwtc-frontend-new.git` | `refactor/full-project`     | `dbfc557`      |
 | 기존 Spring 참고용 | `https://github.com/dongmin3891/iwtc-backend-new.git`  | `codex/nest-migration-plan` | `3703d2d`      |
 
 신규 개발 코드는 `iwtc-backend-nest`에 작성한다. `iwtc-backend-new`를 신규 서버로 배포하지 않는다.
@@ -138,6 +138,7 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 - `playId` 기반 중복 제출 방지
 - 누적 점수 기반 게임 결과 랭킹 조회
 - 미디어 메타데이터 저장 모델과 공개 URL 조회
+- 공개 월드컵 목록·게임 후보·결과·랭킹 응답에 미디어 데이터 포함
 - 회원·비회원 댓글 작성과 최신순 댓글 목록 조회
 - access token으로 확인한 댓글 작성자 회원 ID·닉네임 연결
 - 토큰이 없을 때만 비회원 작성을 허용하는 선택적 댓글 인증
@@ -204,7 +205,7 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 
 게임 결과는 `GamePlay`와 `GamePlacement`에 저장한다. `playId`는 UUID v4이며 같은 결과의 재요청은 기존 결과를 반환하고, 같은 `playId`를 다른 결과에 사용하면 HTTP 409를 반환한다. 랭킹은 후보별 누적 점수로 계산하고 동점 후보에게 같은 순위를 부여한다.
 
-미디어는 PostgreSQL에 메타데이터와 object key만 저장한다. 정적 파일 응답은 `MEDIA_PUBLIC_BASE_URL` 기반의 공개 URL이며 `size=divide2`에 썸네일 key가 없으면 원본 URL로 대체한다. 로컬 Compose에는 MinIO와 버킷 초기화 구성이 포함되어 있다. 정적 이미지는 JPEG·PNG·GIF, 최대 10MB를 허용한다. 생성 시 업로드 후 DB 저장에 실패하면 새 객체를 지우고, 교체 시 DB 트랜잭션이 성공한 뒤 이전 객체를 지운다. 기존 Pexels 이미지를 일반 업로드 파일로 교체할 때는 이전 사진의 `sourceProvider`, `sourceExternalId`, `sourceUrl`, `sourceAuthor`, `sourceAuthorUrl`을 모두 `null`로 초기화한다. 파일을 교체하지 않고 후보명·공개 여부만 수정할 때는 기존 출처 정보를 유지한다.
+미디어는 PostgreSQL에 메타데이터와 object key만 저장한다. 정적 파일 응답은 `MEDIA_PUBLIC_BASE_URL` 기반의 공개 URL이며 `size=divide2`에 썸네일 key가 없으면 원본 URL로 대체한다. 공개 월드컵 목록의 두 미리보기는 `divide2`, 게임 후보·게임 결과·누적 랭킹은 `original` 크기의 미디어 응답을 후보 데이터에 함께 포함한다. 프론트는 포함된 미디어를 우선 사용하고 구버전 응답에서만 `/api/media-files/{mediaFileId}`를 호출한다. 로컬 Compose에는 MinIO와 버킷 초기화 구성이 포함되어 있다. 정적 이미지는 JPEG·PNG·GIF, 최대 10MB를 허용한다. 생성 시 업로드 후 DB 저장에 실패하면 새 객체를 지우고, 교체 시 DB 트랜잭션이 성공한 뒤 이전 객체를 지운다. 기존 Pexels 이미지를 일반 업로드 파일로 교체할 때는 이전 사진의 `sourceProvider`, `sourceExternalId`, `sourceUrl`, `sourceAuthor`, `sourceAuthorUrl`을 모두 `null`로 초기화한다. 파일을 교체하지 않고 후보명·공개 여부만 수정할 때는 기존 출처 정보를 유지한다.
 
 자동화용 Pexels 후보 요청은 `sourceProvider: PEXELS`와 5개 출처 필드를 요구한다. 사진 URL은 HTTPS `pexels.com/photo/{photo-slug}` 형식, 작가 URL은 HTTPS `pexels.com/@{author-slug}` 형식만 허용한다. `www`는 선택적으로 허용하지만 다른 호스트, HTTP, Pexels 검색·일반 페이지, 사용자 정보가 삽입된 위장 URL은 거부한다. URL 앞뒤 공백은 검증 전에 제거한다.
 
@@ -347,6 +348,14 @@ npm run build
 - 린트, 단위 테스트 155개, API 통합 테스트 59개, 프로덕션 빌드가 통과했다. GitHub Actions에서 이미지 push와 배포 태그 갱신까지 성공해 `4b2bc49`로 운영 배포 흐름에 반영되었다. 운영 Swagger의 해당 경로에 DELETE가 노출되고 미인증 요청이 HTTP 401을 반환하는 것도 확인했다.
 - 운영의 실제 월드컵 데이터는 파괴하지 않기 위해 삭제 호출로 검증하지 않았다. 필요하면 별도의 검증용 월드컵을 생성해 UI에서 삭제하고 DB·MinIO 잔여 데이터를 확인한 뒤 검증용 계정까지 정리한다.
 
+### 공개 화면 미디어 N+1 조회 제거 완료
+
+- 백엔드 `77bca77`은 공개 월드컵 목록·게임 후보·게임 결과·누적 랭킹 응답에 연결된 미디어 URL과 종류·출처 정보를 함께 반환한다. 기존 `mediaFileId`는 호환성을 위해 유지한다.
+- 프론트 `3ce19d7`은 응답에 포함된 미디어를 우선 사용하고, 구버전 백엔드 응답에서만 기존 미디어 API를 호출한다. 백엔드와 프론트 배포 순서가 달라도 기능이 유지된다.
+- 운영 월드컵 목록 10개 기준으로 기존 목록 1회와 미디어 최대 20회의 API 요청 구조를 목록 1회로 줄였다. 운영 API에서 미디어 20개가 모두 포함되고 운영 홈에서 10개 월드컵과 이미지가 정상 표시되는 것을 확인했다.
+- 백엔드 린트, 단위 테스트 156개, API 통합 테스트 59개와 빌드가 통과했다. 프론트 타입 검사, 테스트 66개, 린트와 프로덕션 빌드가 통과했다.
+- 운영 원본 이미지 한 건은 약 293KB였고 Next.js의 640px WebP 응답은 약 32KB였다. Next 이미지 최적화는 동작하지만 `thumbnailObjectKey`가 비어 있어 `divide2`도 아직 원본 MinIO URL을 사용하며, 객체와 Next 이미지 응답 캐시는 각각 미설정·60초 상태다.
+
 프론트 디자인 작업은 홈, 게임, 결과·랭킹·댓글, 로그인·회원가입, 월드컵 생성·수정, 내 월드컵 목록과 공통 알림·확인 팝업까지 완료했고 모바일 전역 차단과 후보 카드의 즉시 삭제도 정리했다. 다음 디자인 단위는 실제 모바일 User-Agent에서 공개 사용자 흐름인 홈, 게임 진입·라운드 선택, 1:1 대진과 결과 화면만 회귀 검증하고 발견되는 모바일 레이아웃 문제를 수정하는 것이다. API는 모의 응답을 사용하고 실제 게임 결과·댓글 데이터는 만들지 않는다. 로그인·회원가입과 관리 화면의 모바일 회귀 검증은 그다음 단계로 분리한다.
 
 확정된 운영 구조는 다음과 같다.
@@ -382,7 +391,15 @@ K3s / namespace: iwtc
 - 운영 환경에서 회원가입, 로그인, 게임과 이미지 업로드 사용자 흐름을 검증했다.
 - PostgreSQL과 MinIO 관리 포트는 외부에 공개하지 않는다. Swagger는 현재 외부 공개 상태다.
 
-배포 단계 1~5는 모두 완료되었다. 다음 순서는 다음과 같다.
+배포 단계 1~5는 모두 완료되었다. Cloudflare R2 외부 백업은 사용자 요청으로 잠시 보류했다. 현재 애플리케이션 작업 순서는 다음과 같다.
+
+1. 이미지 업로드 시 EXIF 방향을 보정하고 긴 변 최대 1920px 원본과 640px WebP 썸네일을 생성한다. GIF 원본 애니메이션은 유지하고 목록 썸네일은 첫 프레임을 사용한다.
+2. 원본·썸네일 업로드와 DB 저장 실패 시 두 객체를 모두 정리하고 `thumbnailObjectKey`를 저장한다.
+3. 기존 MinIO 이미지의 썸네일을 만드는 일회성 Job을 추가하고 실패 항목을 재실행할 수 있게 한다.
+4. UUID 객체에 `Cache-Control: public, max-age=31536000, immutable`을 설정하고 Next 이미지 최소 캐시 시간을 늘린다.
+5. 홈·랭킹의 YouTube iframe을 정적 썸네일로 바꾸고 실제 게임에서만 플레이어를 생성한다.
+
+보류한 인프라 백업 순서는 다음과 같다.
 
 1. Cloudflare R2에 IWTC 백업 전용 버킷을 만든다.
 2. 버킷 범위로 제한한 R2 백업 전용 API 토큰을 만들고 실제 값은 Git, HANDOFF, Notion에 기록하지 않는다.
@@ -400,4 +417,4 @@ K3s / namespace: iwtc
 
 새 개발 환경이나 새 AI 작업에서 아래처럼 요청하면 현재 맥락을 빠르게 이어갈 수 있다.
 
-> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 이어서 진행해줘. 기존 운영 DB나 회원 데이터는 사용하지 않는다. 백엔드, 프론트엔드, PostgreSQL, MinIO의 홈서버 K3s 배포와 DNS, TLS, Argo CD 자동 동기화, 운영 사용자 흐름 검증까지 완료되었다. 프론트 DELETE 본문 제거는 `6abdd2e`, 백엔드 월드컵 영구 삭제 API와 자동 배포는 `4b2bc49`까지 완료했다. 삭제 API는 소유자만 호출하며 HTTP 204를 반환하고 관계 데이터와 고아 미디어만 정리한 뒤 MinIO 객체를 최대 3회 삭제한다. 공유 미디어는 보존한다. 다음 디자인 단위는 실제 모바일 User-Agent에서 홈부터 게임 결과까지 공개 사용자 흐름만 모의 API로 회귀 검증하고 발견되는 모바일 레이아웃 문제를 수정하는 것이다. 인증·관리 화면의 모바일 검증은 이후 단계로 분리한다. 인프라 다음 단계는 PostgreSQL `pg_dump`와 MinIO 객체를 Cloudflare R2로 보내는 외부 백업 구성, 보존 정책, 실제 복원 테스트다. 운영 Secret 값과 기존 `iwtc.code-workspace`는 커밋하지 마.
+> `iwtc-backend-nest/HANDOFF.md`를 먼저 읽고 이어서 진행해줘. 기존 운영 DB나 회원 데이터는 사용하지 않는다. 백엔드, 프론트엔드, PostgreSQL, MinIO의 홈서버 K3s 배포와 DNS, TLS, Argo CD 자동 동기화, 운영 사용자 흐름 검증까지 완료되었다. 백엔드 공개 응답의 미디어 포함과 자동 배포는 `f17a2e0`, 프론트 추가 미디어 요청 제거와 자동 배포는 `dbfc557`까지 완료했다. 운영 목록 10개의 미디어 20개가 한 응답에 포함되고 홈 이미지가 정상 표시된다. 다음 작업은 업로드 시 1920px 제한 원본과 640px WebP 썸네일 생성, 기존 이미지 썸네일 backfill, UUID 객체·Next 이미지 캐시 강화다. 홈·랭킹의 YouTube iframe 지연 생성은 그다음 단계다. Cloudflare R2 외부 백업은 사용자 요청으로 잠시 보류했다. 운영 Secret 값과 기존 `iwtc.code-workspace`는 커밋하지 마.
