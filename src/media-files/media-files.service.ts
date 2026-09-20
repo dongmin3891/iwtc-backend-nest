@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { MediaFile } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { MediaSize } from './dto/get-media-file.query.js';
 import type { MediaFileResponse } from './media-files.types.js';
@@ -23,6 +24,10 @@ export class MediaFilesService {
       throw new NotFoundException('미디어 파일을 찾을 수 없습니다.');
     }
 
+    return this.toResponse(mediaFile, size);
+  }
+
+  toResponse(mediaFile: MediaFile, size: MediaSize): MediaFileResponse {
     const mediaData =
       mediaFile.fileType === 'INTERNET_VIDEO_URL'
         ? mediaFile.externalUrl

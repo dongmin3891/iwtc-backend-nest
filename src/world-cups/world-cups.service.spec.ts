@@ -1,8 +1,20 @@
+import type { MediaFilesService } from '../media-files/media-files.service.js';
 import type { PrismaService } from '../prisma/prisma.service.js';
 import { ClearWorldCupDto } from './dto/clear-world-cup.dto.js';
 import { GetWorldCupContentsQuery } from './dto/get-world-cup-contents.query.js';
 import { DateRange, ListWorldCupsQuery } from './dto/list-world-cups.query.js';
 import { WorldCupsService } from './world-cups.service.js';
+
+function createService(prisma: PrismaService): WorldCupsService {
+  const mediaFilesService = {
+    toResponse: vi.fn((mediaFile) => ({
+      mediaFileId: mediaFile.id,
+      mediaData: `https://media.example.com/${mediaFile.objectKey}`,
+    })),
+  } as unknown as MediaFilesService;
+
+  return new WorldCupsService(prisma, mediaFilesService);
+}
 
 describe('WorldCupsService', () => {
   it('returns an empty page for a fresh database', async () => {
@@ -12,7 +24,7 @@ describe('WorldCupsService', () => {
       worldCup: { count, findMany },
       $transaction: (queries: Promise<unknown>[]) => Promise.all(queries),
     } as unknown as PrismaService;
-    const service = new WorldCupsService(prisma);
+    const service = createService(prisma);
     const query = new ListWorldCupsQuery();
     query.dateRange = DateRange.ALL;
 
@@ -36,6 +48,52 @@ describe('WorldCupsService', () => {
     );
   });
 
+  it('embeds preview media in the world cup list response', async () => {
+    const prisma = {
+      worldCup: {
+        count: vi.fn().mockResolvedValue(1),
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 3,
+            title: '이미지 월드컵',
+            description: '설명',
+            candidates: [
+              {
+                name: '후보 A',
+                mediaFileId: 21,
+                mediaFile: { id: 21, objectKey: 'thumbnail-a.webp' },
+              },
+              {
+                name: '후보 B',
+                mediaFileId: 22,
+                mediaFile: { id: 22, objectKey: 'thumbnail-b.webp' },
+              },
+            ],
+          },
+        ]),
+      },
+      $transaction: (queries: Promise<unknown>[]) => Promise.all(queries),
+    } as unknown as PrismaService;
+    const service = createService(prisma);
+    const query = new ListWorldCupsQuery();
+
+    await expect(service.findAll(query)).resolves.toMatchObject({
+      content: [
+        {
+          worldCupId: 3,
+          mediaFile1: {
+            mediaFileId: 21,
+            mediaData: 'https://media.example.com/thumbnail-a.webp',
+          },
+          mediaFile2: {
+            mediaFileId: 22,
+            mediaData: 'https://media.example.com/thumbnail-b.webp',
+          },
+        },
+      ],
+    });
+  });
+
   it('returns supported rounds that fit the active public candidate count', async () => {
     const findFirst = vi.fn().mockResolvedValue({
       id: 1,
@@ -46,7 +104,7 @@ describe('WorldCupsService', () => {
     const prisma = {
       worldCup: { findFirst },
     } as unknown as PrismaService;
-    const service = new WorldCupsService(prisma);
+    const service = createService(prisma);
 
     await expect(service.findAvailableRounds(1)).resolves.toEqual({
       worldCupId: 1,
@@ -73,7 +131,7 @@ describe('WorldCupsService', () => {
     const prisma = {
       worldCup: { findFirst: vi.fn().mockResolvedValue(null) },
     } as unknown as PrismaService;
-    const service = new WorldCupsService(prisma);
+    const service = createService(prisma);
 
     await expect(service.findAvailableRounds(999)).rejects.toMatchObject({
       status: 404,
@@ -99,7 +157,7 @@ describe('WorldCupsService', () => {
       },
       candidate: { findMany },
     } as unknown as PrismaService;
-    const service = new WorldCupsService(prisma);
+    const service = createService(prisma);
     const query = new GetWorldCupContentsQuery();
     query.currentRound = 4;
     query.sliceContents = 1;
@@ -154,7 +212,7 @@ describe('WorldCupsService', () => {
       },
       candidate: { findMany },
     } as unknown as PrismaService;
-    const service = new WorldCupsService(prisma);
+    const service = createService(prisma);
     const query = new GetWorldCupContentsQuery();
     query.currentRound = 2;
     query.sliceContents = 1;
@@ -185,7 +243,7 @@ describe('WorldCupsService', () => {
         }),
       },
     } as unknown as PrismaService;
-    const service = new WorldCupsService(prisma);
+    const service = createService(prisma);
     const query = new GetWorldCupContentsQuery();
     query.currentRound = 8;
     query.sliceContents = 1;
@@ -233,7 +291,7 @@ describe('WorldCupsService', () => {
             operation(transaction),
         ),
     } as unknown as PrismaService;
-    const service = new WorldCupsService(prisma);
+    const service = createService(prisma);
     const request = {
       playId: '550e8400-e29b-41d4-a716-446655440000',
       round: 4,
@@ -294,7 +352,7 @@ describe('WorldCupsService', () => {
             operation(transaction),
         ),
     } as unknown as PrismaService;
-    const service = new WorldCupsService(prisma);
+    const service = createService(prisma);
     const request = {
       playId: '550e8400-e29b-41d4-a716-446655440000',
       round: 2,
@@ -325,7 +383,7 @@ describe('WorldCupsService', () => {
             operation(transaction),
         ),
     } as unknown as PrismaService;
-    const service = new WorldCupsService(prisma);
+    const service = createService(prisma);
     const request = {
       playId: '550e8400-e29b-41d4-a716-446655440000',
       round: 2,
@@ -369,7 +427,7 @@ describe('WorldCupsService', () => {
             operation(transaction),
         ),
     } as unknown as PrismaService;
-    const service = new WorldCupsService(prisma);
+    const service = createService(prisma);
     const request = {
       playId: existingPlay.id,
       round: 2,
@@ -416,7 +474,7 @@ describe('WorldCupsService', () => {
             operation(transaction),
         ),
     } as unknown as PrismaService;
-    const service = new WorldCupsService(prisma);
+    const service = createService(prisma);
     const request = {
       playId: existingPlay.id,
       round: 2,
@@ -451,7 +509,7 @@ describe('WorldCupsService', () => {
       $transaction: vi.fn().mockRejectedValue({ code: 'P2002' }),
       gamePlay: { findUnique: vi.fn().mockResolvedValue(existingPlay) },
     } as unknown as PrismaService;
-    const service = new WorldCupsService(prisma);
+    const service = createService(prisma);
     const request = {
       playId: existingPlay.id,
       round: 2,
@@ -481,7 +539,7 @@ describe('WorldCupsService', () => {
       candidate: { findMany },
       gamePlacement: { groupBy },
     } as unknown as PrismaService;
-    const service = new WorldCupsService(prisma);
+    const service = createService(prisma);
 
     await expect(service.findGameResultContents(1)).resolves.toEqual([
       {
@@ -523,6 +581,7 @@ describe('WorldCupsService', () => {
         id: true,
         name: true,
         mediaFileId: true,
+        mediaFile: true,
       },
     });
     expect(groupBy).toHaveBeenCalledWith({
@@ -536,7 +595,7 @@ describe('WorldCupsService', () => {
     const prisma = {
       worldCup: { findFirst: vi.fn().mockResolvedValue(null) },
     } as unknown as PrismaService;
-    const service = new WorldCupsService(prisma);
+    const service = createService(prisma);
 
     await expect(service.findGameResultContents(999)).rejects.toMatchObject({
       status: 404,

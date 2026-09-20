@@ -16,6 +16,6 @@ import { createS3Client, S3_CLIENT } from './s3-client.provider.js';
       useFactory: createS3Client,
     },
   ],
-  exports: [ObjectStorageService],
+  exports: [MediaFilesService, ObjectStorageService],
 })
 export class MediaFilesModule {}

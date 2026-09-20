@@ -5,6 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
+import { MediaSize } from '../media-files/dto/get-media-file.query.js';
+import { MediaFilesService } from '../media-files/media-files.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ClearWorldCupDto } from './dto/clear-world-cup.dto.js';
 import { GetWorldCupContentsQuery } from './dto/get-world-cup-contents.query.js';
@@ -32,6 +34,7 @@ const GAME_RESULT_SELECT = {
           id: true,
           name: true,
           mediaFileId: true,
+          mediaFile: true,
         },
       },
     },
@@ -44,7 +47,10 @@ type SavedGameResult = Prisma.GamePlayGetPayload<{
 
 @Injectable()
 export class WorldCupsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mediaFilesService: MediaFilesService,
+  ) {}
 
   async findAll(query: ListWorldCupsQuery): Promise<WorldCupPage> {
     const where: Prisma.WorldCupWhereInput = {
@@ -70,6 +76,7 @@ export class WorldCupsService {
             where: { visibleType: 'PUBLIC', deletedAt: null },
             orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
             take: 2,
+            include: { mediaFile: true },
           },
         },
       }),
@@ -83,8 +90,24 @@ export class WorldCupsService {
         description: worldCup.description,
         contentsName1: worldCup.candidates[0]?.name ?? null,
         mediaFileId1: worldCup.candidates[0]?.mediaFileId ?? null,
+        ...(worldCup.candidates[0]?.mediaFile
+          ? {
+              mediaFile1: this.mediaFilesService.toResponse(
+                worldCup.candidates[0].mediaFile,
+                MediaSize.DIVIDE_2,
+              ),
+            }
+          : {}),
         contentsName2: worldCup.candidates[1]?.name ?? null,
         mediaFileId2: worldCup.candidates[1]?.mediaFileId ?? null,
+        ...(worldCup.candidates[1]?.mediaFile
+          ? {
+              mediaFile2: this.mediaFilesService.toResponse(
+                worldCup.candidates[1].mediaFile,
+                MediaSize.DIVIDE_2,
+              ),
+            }
+          : {}),
       })),
       pageable: {
         pageNumber: query.page,
@@ -182,6 +205,7 @@ export class WorldCupsService {
         id: true,
         name: true,
         mediaFileId: true,
+        mediaFile: true,
       },
     });
 
@@ -196,6 +220,14 @@ export class WorldCupsService {
         contentsId: candidate.id,
         name: candidate.name,
         mediaFileId: candidate.mediaFileId,
+        ...(candidate.mediaFile
+          ? {
+              mediaFile: this.mediaFilesService.toResponse(
+                candidate.mediaFile,
+                MediaSize.ORIGINAL,
+              ),
+            }
+          : {}),
         internetMovieStartPlayTime: null,
         videoPlayDuration: null,
       }));
@@ -313,6 +345,7 @@ export class WorldCupsService {
         id: true,
         name: true,
         mediaFileId: true,
+        mediaFile: true,
       },
     });
     const scoreGroups = await this.prisma.gamePlacement.groupBy({
@@ -343,6 +376,14 @@ export class WorldCupsService {
         contentsId: candidate.id,
         contentsName: candidate.name,
         mediaFileId: candidate.mediaFileId,
+        ...(candidate.mediaFile
+          ? {
+              mediaFile: this.mediaFilesService.toResponse(
+                candidate.mediaFile,
+                MediaSize.ORIGINAL,
+              ),
+            }
+          : {}),
         gameRank,
         gameScore: candidate.gameScore,
       };
@@ -356,6 +397,14 @@ export class WorldCupsService {
       contentsName: placement.candidate.name,
       contentsId: placement.candidate.id,
       mediaFileId: placement.candidate.mediaFileId,
+      ...(placement.candidate.mediaFile
+        ? {
+            mediaFile: this.mediaFilesService.toResponse(
+              placement.candidate.mediaFile,
+              MediaSize.ORIGINAL,
+            ),
+          }
+        : {}),
       rank: placement.rank,
     }));
   }
