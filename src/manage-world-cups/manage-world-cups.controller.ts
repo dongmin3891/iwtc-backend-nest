@@ -1,7 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseIntPipe,
   Post,
@@ -11,6 +14,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiCreatedResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -87,7 +91,23 @@ export class ManageWorldCupsController {
     @Body() body: CreateManagedWorldCupDto,
     @Req() request: Request & AuthenticatedRequest,
   ): Promise<ApiResponse<null>> {
-    await this.manageWorldCupsService.update(request.member.id, worldCupId, body);
+    await this.manageWorldCupsService.update(
+      request.member.id,
+      worldCupId,
+      body,
+    );
     return success('월드컵 기본 정보 수정', null);
+  }
+
+  @Delete(':worldCupId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: '내 월드컵 영구 삭제' })
+  @ApiNoContentResponse({ description: '월드컵 삭제 성공' })
+  @ApiNotFoundResponse({ description: '소유한 월드컵을 찾을 수 없음' })
+  async remove(
+    @Param('worldCupId', ParseIntPipe) worldCupId: number,
+    @Req() request: Request & AuthenticatedRequest,
+  ): Promise<void> {
+    await this.manageWorldCupsService.remove(request.member.id, worldCupId);
   }
 }

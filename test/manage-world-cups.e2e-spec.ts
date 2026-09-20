@@ -73,6 +73,7 @@ describe('Manage world cups API (e2e)', () => {
       updatedAt: new Date('2026-09-09T01:00:00.000Z'),
     }),
     create: vi.fn().mockResolvedValue(11),
+    remove: vi.fn().mockResolvedValue(undefined),
   };
   const authService = {
     authorizeAccess: vi.fn().mockResolvedValue({
@@ -205,6 +206,25 @@ describe('Manage world cups API (e2e)', () => {
       .expect(400);
 
     expect(manageWorldCupsService.create).not.toHaveBeenCalled();
+  });
+
+  it('permanently deletes an owned world cup without a request body', async () => {
+    const response = await request(app.getHttpServer())
+      .delete('/api/me/game-manage/world-cups/3')
+      .set('access-token', 'valid-token')
+      .expect(204);
+
+    expect(response.text).toBe('');
+    expect(manageWorldCupsService.remove).toHaveBeenCalledWith(7, 3);
+  });
+
+  it('requires authentication before deleting a world cup', async () => {
+    await request(app.getHttpServer())
+      .delete('/api/me/game-manage/world-cups/3')
+      .expect(401)
+      .expect({ code: -1, message: '로그인이 필요합니다.', data: null });
+
+    expect(manageWorldCupsService.remove).not.toHaveBeenCalled();
   });
 
   it('creates a static image candidate from multipart data', async () => {
