@@ -16,6 +16,7 @@ import type {
   AvailableRounds,
   ClearWorldCupResultContent,
   WorldCupContents,
+  WorldCupDetail,
   WorldCupGameContent,
   WorldCupPage,
   WorldCupRankingContent,
@@ -72,6 +73,15 @@ export class WorldCupsService {
         skip: query.page * query.size,
         take: query.size,
         include: {
+          _count: {
+            select: {
+              candidates: {
+                where: { visibleType: 'PUBLIC', deletedAt: null },
+              },
+              gamePlays: { where: { completedAt: { not: null } } },
+              comments: { where: { deletedAt: null } },
+            },
+          },
           candidates: {
             where: { visibleType: 'PUBLIC', deletedAt: null },
             orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
@@ -88,6 +98,9 @@ export class WorldCupsService {
         worldCupId: worldCup.id,
         title: worldCup.title,
         description: worldCup.description,
+        candidateCount: worldCup._count.candidates,
+        playCount: worldCup._count.gamePlays,
+        commentCount: worldCup._count.comments,
         contentsName1: worldCup.candidates[0]?.name ?? null,
         mediaFileId1: worldCup.candidates[0]?.mediaFileId ?? null,
         ...(worldCup.candidates[0]?.mediaFile
@@ -114,6 +127,45 @@ export class WorldCupsService {
         pageSize: query.size,
       },
       totalPages: Math.ceil(totalElements / query.size),
+    };
+  }
+
+  async findOne(worldCupId: number): Promise<WorldCupDetail> {
+    const worldCup = await this.prisma.worldCup.findFirst({
+      where: {
+        id: worldCupId,
+        visibleType: 'PUBLIC',
+      },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        _count: {
+          select: {
+            candidates: {
+              where: { visibleType: 'PUBLIC', deletedAt: null },
+            },
+            gamePlays: { where: { completedAt: { not: null } } },
+            comments: { where: { deletedAt: null } },
+          },
+        },
+      },
+    });
+
+    if (!worldCup) {
+      throw new NotFoundException('월드컵을 찾을 수 없습니다.');
+    }
+
+    return {
+      worldCupId: worldCup.id,
+      title: worldCup.title,
+      description: worldCup.description,
+      candidateCount: worldCup._count.candidates,
+      playCount: worldCup._count.gamePlays,
+      commentCount: worldCup._count.comments,
+      rounds: SUPPORTED_ROUNDS.filter(
+        (round) => round <= worldCup._count.candidates,
+      ),
     };
   }
 

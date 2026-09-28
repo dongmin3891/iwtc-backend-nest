@@ -12,6 +12,7 @@ IWTC 프론트엔드의 API를 새 PostgreSQL 데이터베이스 기준으로 �
 - Swagger 문서: `http://localhost:3001/docs`
 - 상태 확인: `GET /health/live`, `GET /health/ready`
 - 공개 월드컵 목록: `GET /api/world-cups`
+- 공개 월드컵 상세·참여 통계: `GET /api/world-cups/{worldCupId}`
 - 플레이 가능한 라운드: `GET /api/world-cups/{worldCupId}/available-rounds`
 - 월드컵 대진 후보: `GET /api/world-cups/{worldCupId}/contents`
 - 월드컵 게임 결과 저장: `POST /api/world-cups/{worldCupId}/clear`

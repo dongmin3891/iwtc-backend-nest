@@ -25,6 +25,7 @@ import type {
   AvailableRounds,
   ClearWorldCupResultContent,
   WorldCupContents,
+  WorldCupDetail,
   WorldCupPage,
   WorldCupRankingContent,
 } from './world-cups.types.js';
@@ -42,6 +43,17 @@ export class WorldCupsController {
   ): Promise<ApiResponse<WorldCupPage>> {
     const page = await this.worldCupsService.findAll(query);
     return success('월드컵 페이지 조회 성공', page);
+  }
+
+  @Get(':worldCupId')
+  @ApiOperation({ summary: '공개 월드컵 상세 조회' })
+  @ApiOkResponse({ description: '월드컵 상세 조회 성공' })
+  @ApiNotFoundResponse({ description: '월드컵을 찾을 수 없음' })
+  async findOne(
+    @Param('worldCupId', ParseIntPipe) worldCupId: number,
+  ): Promise<ApiResponse<WorldCupDetail>> {
+    const worldCup = await this.worldCupsService.findOne(worldCupId);
+    return success('월드컵 상세 조회 성공', worldCup);
   }
 
   @Get(':worldCupId/available-rounds')

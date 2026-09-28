@@ -28,7 +28,7 @@ describe('IWTC API (e2e)', () => {
       id: 1,
       title: '첫 번째 월드컵',
       description: '설명',
-      _count: { candidates: 4 },
+      _count: { candidates: 4, gamePlays: 0, comments: 0 },
     });
     const candidates = [
       { id: 1, name: '후보 A', mediaFileId: null },
@@ -340,6 +340,25 @@ describe('IWTC API (e2e)', () => {
       .expect(400);
 
     expect(response.body).toMatchObject({ code: -1, data: null });
+  });
+
+  it('GET /api/world-cups/1 returns public details and engagement counts', async () => {
+    await request(app.getHttpServer())
+      .get('/api/world-cups/1')
+      .expect(200)
+      .expect({
+        code: 1,
+        message: '월드컵 상세 조회 성공',
+        data: {
+          worldCupId: 1,
+          title: '첫 번째 월드컵',
+          description: '설명',
+          candidateCount: 4,
+          playCount: 0,
+          commentCount: 0,
+          rounds: [2, 4],
+        },
+      });
   });
 
   it('GET /api/world-cups/1/available-rounds returns 2 and 4', async () => {

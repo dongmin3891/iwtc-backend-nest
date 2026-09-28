@@ -40,6 +40,15 @@ describe('WorldCupsService', () => {
         skip: 0,
         take: 20,
         include: {
+          _count: expect.objectContaining({
+            select: {
+              candidates: {
+                where: { visibleType: 'PUBLIC', deletedAt: null },
+              },
+              gamePlays: { where: { completedAt: { not: null } } },
+              comments: { where: { deletedAt: null } },
+            },
+          }),
           candidates: expect.objectContaining({
             where: { visibleType: 'PUBLIC', deletedAt: null },
           }),
@@ -57,6 +66,7 @@ describe('WorldCupsService', () => {
             id: 3,
             title: '이미지 월드컵',
             description: '설명',
+            _count: { candidates: 16, gamePlays: 27, comments: 8 },
             candidates: [
               {
                 name: '후보 A',
@@ -81,6 +91,9 @@ describe('WorldCupsService', () => {
       content: [
         {
           worldCupId: 3,
+          candidateCount: 16,
+          playCount: 27,
+          commentCount: 8,
           mediaFile1: {
             mediaFileId: 21,
             mediaData: 'https://media.example.com/thumbnail-a.webp',
@@ -92,6 +105,43 @@ describe('WorldCupsService', () => {
         },
       ],
     });
+  });
+
+  it('returns public world cup details with engagement counts and playable rounds', async () => {
+    const findFirst = vi.fn().mockResolvedValue({
+      id: 3,
+      title: '이미지 월드컵',
+      description: '설명',
+      _count: { candidates: 10, gamePlays: 27, comments: 8 },
+    });
+    const prisma = {
+      worldCup: { findFirst },
+    } as unknown as PrismaService;
+    const service = createService(prisma);
+
+    await expect(service.findOne(3)).resolves.toEqual({
+      worldCupId: 3,
+      title: '이미지 월드컵',
+      description: '설명',
+      candidateCount: 10,
+      playCount: 27,
+      commentCount: 8,
+      rounds: [2, 4, 8],
+    });
+    expect(findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 3, visibleType: 'PUBLIC' },
+      }),
+    );
+  });
+
+  it('rejects details for an unknown or private world cup', async () => {
+    const prisma = {
+      worldCup: { findFirst: vi.fn().mockResolvedValue(null) },
+    } as unknown as PrismaService;
+    const service = createService(prisma);
+
+    await expect(service.findOne(999)).rejects.toMatchObject({ status: 404 });
   });
 
   it('returns supported rounds that fit the active public candidate count', async () => {

@@ -4,12 +4,25 @@ export interface WorldCupListItem {
   worldCupId: number;
   title: string;
   description: string;
+  candidateCount: number;
+  playCount: number;
+  commentCount: number;
   contentsName1: string | null;
   mediaFileId1: number | null;
   mediaFile1?: MediaFileResponse;
   contentsName2: string | null;
   mediaFileId2: number | null;
   mediaFile2?: MediaFileResponse;
+}
+
+export interface WorldCupDetail {
+  worldCupId: number;
+  title: string;
+  description: string;
+  candidateCount: number;
+  playCount: number;
+  commentCount: number;
+  rounds: number[];
 }
 
 export interface WorldCupPage {

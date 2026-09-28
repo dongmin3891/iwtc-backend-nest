@@ -1,6 +1,6 @@
 # IWTC 개발 인수인계
 
-마지막 확인일: 2026-09-21
+마지막 확인일: 2026-09-28
 
 이 문서는 다른 컴퓨터나 새 Cursor 환경에서 IWTC 개발을 바로 이어가기 위한 현재 상태와 실행 절차를 정리한다.
 
@@ -132,6 +132,7 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 - Swagger 문서
 - liveness/readiness 상태 확인
 - 공개 월드컵 목록 조회
+- 공개 월드컵 상세와 후보·완료 플레이·댓글 집계 조회
 - 플레이 가능한 라운드 조회
 - 게임 대진 후보 조회와 탈락 후보 제외
 - 게임 결과 이력과 1~4위 저장
@@ -177,6 +178,7 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 | GET    | `/health/live`                                                | 완료 |
 | GET    | `/health/ready`                                               | 완료 |
 | GET    | `/api/world-cups`                                             | 완료 |
+| GET    | `/api/world-cups/{worldCupId}`                                | 완료 |
 | GET    | `/api/world-cups/{worldCupId}/available-rounds`               | 완료 |
 | GET    | `/api/world-cups/{worldCupId}/contents`                       | 완료 |
 | POST   | `/api/world-cups/{worldCupId}/clear`                          | 완료 |
@@ -202,6 +204,8 @@ NEXT_PUBLIC_API_MEMBER_URL=http://localhost:3001/
 | DELETE | `/api/me/game-contents-manage/world-cups/{worldCupId}/contents/{contentsId}` | 완료 |
 
 개발용 seed는 공개 월드컵 1개와 `후보 A`부터 `후보 D`까지 총 4개 후보를 만든다. 후보 ID는 실행 환경에 따라 달라질 수 있으므로 코드에서 특정 ID를 전제로 사용하지 않는다.
+
+공개 월드컵 목록과 상세 응답은 홈 카드와 게임 전 상세 페이지에 사용할 `candidateCount`, `playCount`, `commentCount`를 함께 반환한다. 후보 수는 공개·미삭제 후보, 플레이 수는 결과 저장까지 완료된 `GamePlay`, 댓글 수는 삭제되지 않은 댓글 기준이다. 상세 응답은 후보 수 이하의 지원 라운드도 함께 반환한다. 목록 조회는 관계별 `_count`를 한 번의 Prisma 조회에 포함하므로 카드마다 별도 집계 요청을 만들지 않는다.
 
 게임 결과는 `GamePlay`와 `GamePlacement`에 저장한다. `playId`는 UUID v4이며 같은 결과의 재요청은 기존 결과를 반환하고, 같은 `playId`를 다른 결과에 사용하면 HTTP 409를 반환한다. 랭킹은 후보별 누적 점수로 계산하고 동점 후보에게 같은 순위를 부여한다.
 
