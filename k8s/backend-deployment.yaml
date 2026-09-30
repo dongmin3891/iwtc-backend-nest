@@ -44,6 +44,12 @@ spec:
                 name: iwtc-backend-config
             - secretRef:
                 name: iwtc-secrets
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: iwtc-shared-db
+                  key: DATABASE_URL
           lifecycle:
             preStop:
               exec:
